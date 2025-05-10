@@ -1,11 +1,33 @@
 import bpy
 import os
 
+PANEL_VERSION = "1"
+
+def update_srt_path(self, context):
+    """Update SRT path when video path changes"""
+    if self.video_path:
+        # Get the absolute path
+        video_path = bpy.path.abspath(self.video_path)
+        # Change extension to .srt
+        base_path, ext = os.path.splitext(video_path)
+        srt_path = base_path + ".SRT"
+        
+        # Only set if the SRT file exists
+        if os.path.exists(srt_path):
+            self.srt_path = srt_path
+        else:
+            # Try lowercase .srt as an alternative
+            srt_path_lower = base_path + ".srt"
+            if os.path.exists(srt_path_lower):
+                self.srt_path = srt_path_lower
+
+
 class SkySplatProperties(bpy.types.PropertyGroup):
     video_path: bpy.props.StringProperty(
         name="Video File",
         description="Path to the input video",
-        subtype='FILE_PATH'
+        subtype='FILE_PATH',
+        update=update_srt_path
     )
     srt_path: bpy.props.StringProperty(
         name="SRT File",
@@ -132,3 +154,8 @@ class SKY_SPLAT_PT_video_panel(bpy.types.Panel):
         box.prop(props, "frame_step")
         box.prop(props, "output_folder")
         box.operator("skysplat.extract_frames", icon='RENDER_STILL')
+
+        # Version indicator at the bottom
+        row = layout.row()
+        row.alignment = 'RIGHT'
+        row.label(text=f"Version: {PANEL_VERSION}")
