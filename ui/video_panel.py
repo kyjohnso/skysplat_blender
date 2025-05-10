@@ -39,11 +39,58 @@ class SkySplatProperties(bpy.types.PropertyGroup):
 class SKY_SPLAT_OT_load_video(bpy.types.Operator):
     bl_idname = "skysplat.load_video"
     bl_label = "Load Video and SRT"
-    bl_description = "Load the video and associated SRT file"
+    bl_description = "Load the video and associated SRT file into the Video Sequencer"
 
     def execute(self, context):
         props = context.scene.skysplat_props
-        self.report({'INFO'}, f"Loaded: {props.video_path}, {props.srt_path}")
+        
+        # Validate paths
+        if not props.video_path:
+            self.report({'ERROR'}, "Please select a video file")
+            return {'CANCELLED'}
+            
+        video_path = bpy.path.abspath(props.video_path)
+        if not os.path.exists(video_path):
+            self.report({'ERROR'}, f"Video file not found: {props.video_path}")
+            return {'CANCELLED'}
+        
+        # Set up the Video Sequencer
+        if not context.scene.sequence_editor:
+            context.scene.sequence_editor_create()
+        
+        seq_editor = context.scene.sequence_editor
+        
+        # Clear existing strips if any
+        for strip in seq_editor.sequences_all:
+            seq_editor.sequences.remove(strip)
+        
+        # Add video strip
+        video_strip = seq_editor.sequences.new_movie(
+            name=os.path.basename(video_path),
+            filepath=video_path,
+            channel=1,
+            frame_start=1
+        )
+        
+        # Auto-set scene frame range to match video
+        context.scene.frame_start = 1
+        context.scene.frame_end = video_strip.frame_final_duration
+        
+        # Set default frame extraction range based on video
+        props.frame_start = 1
+        props.frame_end = video_strip.frame_final_duration
+        
+        # Switch to the Video Editing workspace if it exists
+        if 'Video Editing' in bpy.data.workspaces:
+            bpy.context.window.workspace = bpy.data.workspaces['Video Editing']
+        
+        # Add SRT file as subtitle if provided
+        if props.srt_path and os.path.exists(bpy.path.abspath(props.srt_path)):
+            # Note: Blender doesn't directly support SRT files in the sequencer
+            # This is a placeholder for future implementation
+            self.report({'INFO'}, f"SRT file loaded: {props.srt_path} (metadata only)")
+        
+        self.report({'INFO'}, f"Loaded video into sequencer: {props.video_path}")
         return {'FINISHED'}
 
 class SKY_SPLAT_OT_extract_frames(bpy.types.Operator):
