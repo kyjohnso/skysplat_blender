@@ -1,7 +1,8 @@
 import bpy
 import os
+from datetime import datetime
 
-PANEL_VERSION = "1"
+PANEL_VERSION = "2"  # Updated version number
 
 def update_srt_path(self, context):
     """Update SRT path when video path changes"""
@@ -119,11 +120,73 @@ class SKY_SPLAT_OT_extract_frames(bpy.types.Operator):
     bl_idname = "skysplat.extract_frames"
     bl_label = "Extract Frames"
     bl_description = "Extract frames from the loaded video"
-
+    
     def execute(self, context):
         props = context.scene.skysplat_props
-        self.report({'INFO'}, f"Extracting frames {props.frame_start}-{props.frame_end} (step {props.frame_step}) to {props.output_folder}")
-        return {'FINISHED'}
+        
+        # Validate required fields
+        if not props.video_path:
+            self.report({'ERROR'}, "Please load a video first")
+            return {'CANCELLED'}
+            
+        if not props.output_folder:
+            self.report({'ERROR'}, "Please specify an output folder")
+            return {'CANCELLED'}
+            
+        output_folder = bpy.path.abspath(props.output_folder)
+        
+        # Create output directory if it doesn't exist
+        os.makedirs(output_folder, exist_ok=True)
+        
+        # Create timestamp folder to avoid overwriting previous extractions
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        frames_folder = os.path.join(output_folder, f"frames_{timestamp}")
+        os.makedirs(frames_folder, exist_ok=True)
+        
+        # Store original render settings to restore later
+        original_path = context.scene.render.filepath
+        original_file_format = context.scene.render.image_settings.file_format
+        original_color_mode = context.scene.render.image_settings.color_mode
+        original_frame_start = context.scene.frame_start
+        original_frame_end = context.scene.frame_end
+        original_frame_step = context.scene.frame_step
+        
+        try:
+            # Setup render settings
+            context.scene.render.filepath = os.path.join(frames_folder, "frame_")
+            context.scene.render.image_settings.file_format = 'PNG'
+            context.scene.render.image_settings.color_mode = 'RGB'
+            
+            # Set frame range based on user input
+            context.scene.frame_start = props.frame_start
+            context.scene.frame_end = props.frame_end
+            context.scene.frame_step = props.frame_step
+            
+            # Render the animation frames
+            bpy.ops.render.opengl(animation=True, sequencer=True)
+            
+            # Count extracted frames
+            frame_count = len([f for f in os.listdir(frames_folder) if f.endswith('.png')])
+            
+            # Open the output folder
+            bpy.ops.wm.path_open(filepath=frames_folder)
+            
+            self.report({'INFO'}, f"Successfully extracted {frame_count} frames to {frames_folder}")
+            
+            return {'FINISHED'}
+            
+        except Exception as e:
+            self.report({'ERROR'}, f"Error: {str(e)}")
+            return {'CANCELLED'}
+            
+        finally:
+            # Restore original render settings
+            context.scene.render.filepath = original_path
+            context.scene.render.image_settings.file_format = original_file_format
+            context.scene.render.image_settings.color_mode = original_color_mode
+            context.scene.frame_start = original_frame_start
+            context.scene.frame_end = original_frame_end
+            context.scene.frame_step = original_frame_step
 
 class SKY_SPLAT_PT_video_panel(bpy.types.Panel):
     bl_label = "SkySplat Video Loader"
