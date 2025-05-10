@@ -1,8 +1,7 @@
 import bpy
 import os
-from datetime import datetime
 
-PANEL_VERSION = "2"  # Updated version number
+PANEL_VERSION = "3"  # Updated version number
 
 def update_srt_path(self, context):
     """Update SRT path when video path changes"""
@@ -22,13 +21,26 @@ def update_srt_path(self, context):
             if os.path.exists(srt_path_lower):
                 self.srt_path = srt_path_lower
 
+        # Also update the output folder when video path changes
+        update_output_folder(self, context)
+
+def update_output_folder(self, context):
+    """Set default output folder based on video path"""
+    if self.video_path:
+        video_path = bpy.path.abspath(self.video_path)
+        # Get directory and filename without extension
+        video_dir = os.path.dirname(video_path)
+        video_name = os.path.splitext(os.path.basename(video_path))[0]
+        # Create frames folder path
+        frames_folder = os.path.join(video_dir, f"{video_name}_frames")
+        self.output_folder = frames_folder
 
 class SkySplatProperties(bpy.types.PropertyGroup):
     video_path: bpy.props.StringProperty(
         name="Video File",
         description="Path to the input video",
         subtype='FILE_PATH',
-        update=update_srt_path
+        update=update_srt_path  # This will also trigger update_output_folder indirectly
     )
     srt_path: bpy.props.StringProperty(
         name="SRT File",
@@ -138,11 +150,6 @@ class SKY_SPLAT_OT_extract_frames(bpy.types.Operator):
         # Create output directory if it doesn't exist
         os.makedirs(output_folder, exist_ok=True)
         
-        # Create timestamp folder to avoid overwriting previous extractions
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        frames_folder = os.path.join(output_folder, f"frames_{timestamp}")
-        os.makedirs(frames_folder, exist_ok=True)
-        
         # Store original render settings to restore later
         original_path = context.scene.render.filepath
         original_file_format = context.scene.render.image_settings.file_format
@@ -153,7 +160,7 @@ class SKY_SPLAT_OT_extract_frames(bpy.types.Operator):
         
         try:
             # Setup render settings
-            context.scene.render.filepath = os.path.join(frames_folder, "frame_")
+            context.scene.render.filepath = os.path.join(output_folder, "frame_")
             context.scene.render.image_settings.file_format = 'PNG'
             context.scene.render.image_settings.color_mode = 'RGB'
             
@@ -166,12 +173,12 @@ class SKY_SPLAT_OT_extract_frames(bpy.types.Operator):
             bpy.ops.render.opengl(animation=True, sequencer=True)
             
             # Count extracted frames
-            frame_count = len([f for f in os.listdir(frames_folder) if f.endswith('.png')])
+            frame_count = len([f for f in os.listdir(output_folder) if f.endswith('.png')])
             
             # Open the output folder
-            bpy.ops.wm.path_open(filepath=frames_folder)
+            bpy.ops.wm.path_open(filepath=output_folder)
             
-            self.report({'INFO'}, f"Successfully extracted {frame_count} frames to {frames_folder}")
+            self.report({'INFO'}, f"Successfully extracted {frame_count} frames to {output_folder}")
             
             return {'FINISHED'}
             
