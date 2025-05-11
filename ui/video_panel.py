@@ -1,7 +1,7 @@
 import bpy
 import os
 
-PANEL_VERSION = "3"  # Updated version number
+PANEL_VERSION = "4"  # Updated version number
 
 def update_srt_path(self, context):
     """Update SRT path when video path changes"""
@@ -229,3 +229,20 @@ class SKY_SPLAT_PT_video_panel(bpy.types.Panel):
         row = layout.row()
         row.alignment = 'RIGHT'
         row.label(text=f"Version: {PANEL_VERSION}")
+
+def register():
+    bpy.utils.register_class(SkySplatProperties)
+    bpy.types.Scene.skysplat_props = bpy.props.PointerProperty(type=SkySplatProperties)
+    bpy.utils.register_class(SKY_SPLAT_OT_load_video)
+    bpy.utils.register_class(SKY_SPLAT_OT_extract_frames)
+    bpy.utils.register_class(SKY_SPLAT_PT_video_panel)
+
+def unregister():
+    bpy.utils.unregister_class(SKY_SPLAT_PT_video_panel)
+    bpy.utils.unregister_class(SKY_SPLAT_OT_extract_frames)
+    bpy.utils.unregister_class(SKY_SPLAT_OT_load_video)
+    del bpy.types.Scene.skysplat_props
+    bpy.utils.unregister_class(SkySplatProperties)
+
+if __name__ == "__main__":
+    register()
