@@ -1,7 +1,7 @@
 import bpy
 import os
 
-PANEL_VERSION = "4"  # Updated version number
+PANEL_VERSION = "5"  # Updated version number
 
 def update_srt_path(self, context):
     """Update SRT path when video path changes"""
@@ -23,6 +23,10 @@ def update_srt_path(self, context):
 
         # Also update the output folder when video path changes
         update_output_folder(self, context)
+
+        # Update COLMAP paths if that property group exists
+        if hasattr(context.scene, 'colmap_props'):
+            context.scene.colmap_props.update_from_video_panel(context)
 
 def update_output_folder(self, context):
     """Set default output folder based on video path"""
@@ -157,8 +161,22 @@ class SKY_SPLAT_OT_extract_frames(bpy.types.Operator):
         original_frame_start = context.scene.frame_start
         original_frame_end = context.scene.frame_end
         original_frame_step = context.scene.frame_step
+        original_res_x = context.scene.render.resolution_x
+        original_res_y = context.scene.render.resolution_y
+        original_res_pct = context.scene.render.resolution_percentage
         
         try:
+            # Get video sequence if available and set resolution
+            if context.scene.sequence_editor:
+                for seq in context.scene.sequence_editor.sequences_all:
+                    if seq.type == 'MOVIE':
+                        # Set render resolution to match the video's full resolution
+                        context.scene.render.resolution_x = seq.elements[0].orig_width
+                        context.scene.render.resolution_y = seq.elements[0].orig_height
+                        context.scene.render.resolution_percentage = 100
+                        self.report({'INFO'}, f"Set render resolution to {seq.elements[0].orig_width}x{seq.elements[0].orig_height}")
+                        break
+            
             # Setup render settings
             context.scene.render.filepath = os.path.join(output_folder, "frame_")
             context.scene.render.image_settings.file_format = 'PNG'
@@ -180,6 +198,10 @@ class SKY_SPLAT_OT_extract_frames(bpy.types.Operator):
             
             self.report({'INFO'}, f"Successfully extracted {frame_count} frames to {output_folder}")
             
+            # After successful extraction, update COLMAP paths
+            if hasattr(context.scene, 'colmap_props'):
+                context.scene.colmap_props.update_from_video_panel(context)
+
             return {'FINISHED'}
             
         except Exception as e:
@@ -194,6 +216,10 @@ class SKY_SPLAT_OT_extract_frames(bpy.types.Operator):
             context.scene.frame_start = original_frame_start
             context.scene.frame_end = original_frame_end
             context.scene.frame_step = original_frame_step
+            context.scene.render.resolution_x = original_res_x
+            context.scene.render.resolution_y = original_res_y
+            context.scene.render.resolution_percentage = original_res_pct
+        
 
 class SKY_SPLAT_PT_video_panel(bpy.types.Panel):
     bl_label = "SkySplat Video Loader"
