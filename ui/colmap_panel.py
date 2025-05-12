@@ -4,13 +4,106 @@ import shutil
 import subprocess
 import tempfile
 import logging
+import platform
+import sys
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger('SkySplat')
 
 # Panel version constant
-PANEL_VERSION = "0.3.0"
+PANEL_VERSION = "0.3.1"
+
+def get_default_colmap_path():
+    """Get default COLMAP path based on operating system"""
+    system = platform.system()
+    
+    if system == "Windows":
+        # Common installation paths on Windows
+        possible_paths = [
+            os.path.join(os.environ.get('PROGRAMFILES', 'C:\\Program Files'), 'COLMAP', 'COLMAP.exe'),
+            os.path.join(os.environ.get('PROGRAMFILES(X86)', 'C:\\Program Files (x86)'), 'COLMAP', 'COLMAP.exe'),
+            os.path.join(os.environ.get('LOCALAPPDATA', 'C:\\Users\\User\\AppData\\Local'), 'COLMAP', 'COLMAP.exe')
+        ]
+        for path in possible_paths:
+            if os.path.exists(path):
+                return path
+        return ""
+    
+    elif system == "Darwin":  # macOS
+        # Common installation paths on macOS
+        possible_paths = [
+            "/Applications/COLMAP.app/Contents/MacOS/colmap",
+            "/usr/local/bin/colmap",
+            os.path.expanduser("~/Applications/COLMAP.app/Contents/MacOS/colmap")
+        ]
+        for path in possible_paths:
+            if os.path.exists(path):
+                return path
+        return ""
+    
+    elif system == "Linux":
+        # Try to find colmap in PATH on Linux
+        try:
+            result = subprocess.run(["which", "colmap"], capture_output=True, text=True, check=False)
+            if result.returncode == 0:
+                return result.stdout.strip()
+        except:
+            pass
+        
+        # Common installation paths on Linux
+        possible_paths = [
+            "/usr/bin/colmap",
+            "/usr/local/bin/colmap"
+        ]
+        for path in possible_paths:
+            if os.path.exists(path):
+                return path
+        return ""
+    
+    return ""
+
+def get_default_magick_path():
+    """Get default ImageMagick path based on operating system"""
+    system = platform.system()
+    
+    if system == "Windows":
+        # Common installation paths on Windows
+        possible_paths = [
+            os.path.join(os.environ.get('PROGRAMFILES', 'C:\\Program Files'), 'ImageMagick-7.0.10-Q16', 'magick.exe'),
+            os.path.join(os.environ.get('PROGRAMFILES', 'C:\\Program Files'), 'ImageMagick', 'magick.exe'),
+            os.path.join(os.environ.get('PROGRAMFILES(X86)', 'C:\\Program Files (x86)'), 'ImageMagick-7.0.10-Q16', 'magick.exe'),
+            os.path.join(os.environ.get('PROGRAMFILES(X86)', 'C:\\Program Files (x86)'), 'ImageMagick', 'magick.exe')
+        ]
+        for path in possible_paths:
+            if os.path.exists(path):
+                return path
+        return ""
+    
+    elif system == "Darwin" or system == "Linux":
+        # Try to find convert/magick in PATH on macOS/Linux
+        commands = ["magick", "convert"]  # ImageMagick 7 uses 'magick', older versions use 'convert'
+        for cmd in commands:
+            try:
+                result = subprocess.run(["which", cmd], capture_output=True, text=True, check=False)
+                if result.returncode == 0:
+                    return result.stdout.strip()
+            except:
+                pass
+        
+        # Common installation paths
+        possible_paths = [
+            "/usr/bin/magick",
+            "/usr/local/bin/magick",
+            "/usr/bin/convert",
+            "/usr/local/bin/convert"
+        ]
+        for path in possible_paths:
+            if os.path.exists(path):
+                return path
+        return ""
+    
+    return ""
 
 class SKY_SPLAT_ColmapProperties(bpy.types.PropertyGroup):
     """Properties for COLMAP processing"""
@@ -19,14 +112,14 @@ class SKY_SPLAT_ColmapProperties(bpy.types.PropertyGroup):
         name="COLMAP Executable",
         description="Path to the COLMAP executable",
         subtype='FILE_PATH',
-        default=""
+        default=get_default_colmap_path()
     )
     
     magick_path: bpy.props.StringProperty(
         name="ImageMagick Executable",
         description="Path to the ImageMagick executable",
         subtype='FILE_PATH',
-        default=""
+        default=get_default_magick_path()
     )
     
     input_folder: bpy.props.StringProperty(
