@@ -10,7 +10,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 logger = logging.getLogger('SkySplat')
 
 # Panel version constant
-PANEL_VERSION = "0.2.0"
+PANEL_VERSION = "0.3.0"
 
 class SKY_SPLAT_ColmapProperties(bpy.types.PropertyGroup):
     """Properties for COLMAP processing"""
@@ -83,7 +83,7 @@ class SKY_SPLAT_ColmapProperties(bpy.types.PropertyGroup):
             
             # Update paths
             self.input_folder = frames_folder
-            self.output_folder = colmap_folder
+            self.output_folder = colmap_output_folder
 
 
 def run_command(command, cwd=None):
