@@ -350,7 +350,6 @@ class SKY_SPLAT_PT_colmap_panel(bpy.types.Panel):
         
         row = box.row()
         row.prop(props, "use_gpu")
-        row.prop(props, "resize_images")
         
         # Input/Output settings
         box = layout.box()
