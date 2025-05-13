@@ -7,12 +7,19 @@ import logging
 import platform
 import sys
 
+import numpy as np
+import mathutils
+import math
+import sqlite3
+import struct
+from mathutils import Matrix, Vector
+
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger('SkySplat')
 
 # Panel version constant
-PANEL_VERSION = "0.3.1"
+PANEL_VERSION = "0.3.3"
 
 def get_default_colmap_path():
     """Get default COLMAP path based on operating system"""
@@ -115,13 +122,6 @@ class SKY_SPLAT_ColmapProperties(bpy.types.PropertyGroup):
         default=get_default_colmap_path()
     )
     
-    magick_path: bpy.props.StringProperty(
-        name="ImageMagick Executable",
-        description="Path to the ImageMagick executable",
-        subtype='FILE_PATH',
-        default=get_default_magick_path()
-    )
-    
     input_folder: bpy.props.StringProperty(
         name="Input Folder",
         description="Folder containing images to process with COLMAP",
@@ -153,11 +153,15 @@ class SKY_SPLAT_ColmapProperties(bpy.types.PropertyGroup):
         ],
         default='OPENCV'
     )
-    
-    resize_images: bpy.props.BoolProperty(
-        name="Create Multi-res Images",
-        description="Create multi-resolution images for faster rendering",
-        default=True
+
+    matching_type: bpy.props.EnumProperty(
+        name="Matching Type",
+        description="Choose between sequential or exhaustive matching",
+        items=[
+            ('SEQUENTIAL', "Sequential", "Use sequential matching - faster but works best for video frames with consecutive overlap"),
+            ('EXHAUSTIVE', "Exhaustive", "Use exhaustive matching - slower but more thorough for unordered image collections")
+        ],
+        default='SEQUENTIAL'
     )
     
     def update_from_video_panel(self, context):
@@ -209,7 +213,6 @@ def run_colmap_processing(props):
     
     # Configure COLMAP command
     colmap_command = f'"{props.colmap_path}"' if props.colmap_path else "colmap"
-    magick_command = f'"{props.magick_path}"' if props.magick_path else "magick"
     use_gpu = 1 if props.use_gpu else 0
     
     # Create directories
@@ -226,10 +229,15 @@ def run_colmap_processing(props):
     if run_command(feature_cmd) != 0:
         raise RuntimeError("Feature extraction failed")
     
-    # Feature matching
-    matching_cmd = f'{colmap_command} exhaustive_matcher ' \
-                  f'--database_path "{source_path}/distorted/database.db" ' \
-                  f'--SiftMatching.use_gpu {use_gpu}'
+    # Feature matching - choose method based on matching_type
+    if props.matching_type == 'SEQUENTIAL':
+        matching_cmd = f'{colmap_command} sequential_matcher ' \
+                      f'--database_path "{source_path}/distorted/database.db" ' \
+                      f'--SiftMatching.use_gpu {use_gpu}'
+    else:  # EXHAUSTIVE
+        matching_cmd = f'{colmap_command} exhaustive_matcher ' \
+                      f'--database_path "{source_path}/distorted/database.db" ' \
+                      f'--SiftMatching.use_gpu {use_gpu}'
     
     if run_command(matching_cmd) != 0:
         raise RuntimeError("Feature matching failed")
@@ -265,46 +273,7 @@ def run_colmap_processing(props):
         destination_file = os.path.join(source_path, "sparse", "0", file)
         shutil.move(source_file, destination_file)
     
-    # Create multi-resolution images if requested
-    if props.resize_images:
-        create_multires_images(source_path, magick_command)
-    
     return True
-
-
-def create_multires_images(source_path, magick_command):
-    """Create multi-resolution images for faster rendering"""
-    logger.info("Creating multi-resolution images...")
-    
-    # Create directories
-    os.makedirs(os.path.join(source_path, "images_2"), exist_ok=True)
-    os.makedirs(os.path.join(source_path, "images_4"), exist_ok=True)
-    os.makedirs(os.path.join(source_path, "images_8"), exist_ok=True)
-    
-    # Get list of images
-    image_files = os.listdir(os.path.join(source_path, "images"))
-    
-    for file in image_files:
-        source_file = os.path.join(source_path, "images", file)
-        
-        # 50% size
-        dest_file_2 = os.path.join(source_path, "images_2", file)
-        shutil.copy2(source_file, dest_file_2)
-        if run_command(f'{magick_command} mogrify -resize 50% "{dest_file_2}"') != 0:
-            raise RuntimeError("50% resize failed")
-        
-        # 25% size
-        dest_file_4 = os.path.join(source_path, "images_4", file)
-        shutil.copy2(source_file, dest_file_4)
-        if run_command(f'{magick_command} mogrify -resize 25% "{dest_file_4}"') != 0:
-            raise RuntimeError("25% resize failed")
-        
-        # 12.5% size
-        dest_file_8 = os.path.join(source_path, "images_8", file)
-        shutil.copy2(source_file, dest_file_8)
-        if run_command(f'{magick_command} mogrify -resize 12.5% "{dest_file_8}"') != 0:
-            raise RuntimeError("12.5% resize failed")
-
 
 class SKY_SPLAT_OT_run_colmap(bpy.types.Operator):
     bl_idname = "skysplat.run_colmap"
@@ -376,8 +345,8 @@ class SKY_SPLAT_PT_colmap_panel(bpy.types.Panel):
         box = layout.box()
         box.label(text="COLMAP Settings")
         box.prop(props, "colmap_path")
-        box.prop(props, "magick_path")
         box.prop(props, "camera_model")
+        box.prop(props, "matching_type")
         
         row = box.row()
         row.prop(props, "use_gpu")
