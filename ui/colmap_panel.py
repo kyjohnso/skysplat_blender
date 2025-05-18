@@ -18,7 +18,7 @@ from mathutils import Matrix, Vector
 # Use relative import to get functions from utils directory
 from ..utils.read_write_model import (
     read_model, write_model, qvec2rotmat, rotmat2qvec,
-    Image, Point3D
+    Image, Point3D, Camera
 )
 
 # Set up logging
@@ -495,7 +495,7 @@ class SKY_SPLAT_OT_load_colmap_model(bpy.types.Operator):
             logger.error(f"Failed to load COLMAP model: {str(e)}", exc_info=True)
             return {'CANCELLED'}
         
-# Operator to export transformed COLMAP model
+# Operator to export transformed COLMAP model with proper scale handling
 class SKY_SPLAT_OT_export_colmap_model(bpy.types.Operator):
     bl_idname = "skysplat.export_colmap_model"
     bl_label = "Export Transformed Model"
@@ -540,6 +540,11 @@ class SKY_SPLAT_OT_export_colmap_model(bpy.types.Operator):
                                               (0, -1, 0, 0),
                                               (0, 0, -1, 0),
                                               (0, 0, 0, 1)))
+            
+            # Extract scaling from the root's transformation
+            # This is uniform scale - average of X, Y, Z scales
+            scale_factor = (root.scale.x + root.scale.y + root.scale.z) / 3.0
+            logger.info(f"Detected scale factor: {scale_factor}")
             
             # Create a dictionary of image objects by ID for quick lookup
             image_objects = {}
@@ -622,6 +627,44 @@ class SKY_SPLAT_OT_export_colmap_model(bpy.types.Operator):
                 
                 # Replace the original points with transformed ones
                 points3D = transformed_points3D
+            
+            # Update camera intrinsics to account for scaling
+            # This is crucial for COLMAP to properly visualize cameras after scaling
+            if scale_factor != 1.0:
+                # Create new cameras with scaled intrinsics
+                scaled_cameras = {}
+                for camera_id, camera in cameras.items():
+                    params = list(camera.params)
+                    
+                    # Scale focal length and principal point parameters
+                    # The exact parameters to scale depend on the camera model
+                    if camera.model in ['SIMPLE_PINHOLE', 'PINHOLE', 'SIMPLE_RADIAL', 'RADIAL', 'OPENCV', 'FULL_OPENCV']:
+                        # For most models, first param is focal length
+                        params[0] *= scale_factor  # Scale focal length
+                        
+                        # If model has separate focal lengths for x and y
+                        if camera.model in ['PINHOLE', 'OPENCV', 'FULL_OPENCV'] and len(params) > 1:
+                            params[1] *= scale_factor  # Scale second focal length
+                        
+                        # Scale principal point (cx, cy) if present
+                        if camera.model in ['SIMPLE_PINHOLE', 'PINHOLE'] and len(params) > 2:
+                            params[2] *= scale_factor  # cx
+                            params[3] *= scale_factor  # cy
+                        elif camera.model in ['OPENCV', 'FULL_OPENCV'] and len(params) > 3:
+                            params[2] *= scale_factor  # cx
+                            params[3] *= scale_factor  # cy
+                    
+                    # Create new camera with scaled parameters
+                    scaled_cameras[camera_id] = Camera(
+                        id=camera.id,
+                        model=camera.model,
+                        width=camera.width,
+                        height=camera.height,
+                        params=np.array(params)
+                    )
+                
+                # Replace original cameras with scaled ones
+                cameras = scaled_cameras
             
             # Write the updated model
             write_model(cameras, images, points3D, export_dir)
