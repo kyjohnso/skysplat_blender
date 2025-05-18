@@ -336,7 +336,7 @@ class SKY_SPLAT_OT_sync_with_video(bpy.types.Operator):
         self.report({'INFO'}, "COLMAP paths synchronized with video")
         return {'FINISHED'}
 
-# Modify the load_colmap_model operator to properly align cameras and point cloud
+# Operator to load COLMAP model into Blender with proper camera transformation
 class SKY_SPLAT_OT_load_colmap_model(bpy.types.Operator):
     bl_idname = "skysplat.load_colmap_model"
     bl_label = "Load COLMAP Model"
@@ -386,64 +386,7 @@ class SKY_SPLAT_OT_load_colmap_model(bpy.types.Operator):
                                               (0, 0, -1, 0),
                                               (0, 0, 0, 1)))
             
-            # Calculate the centroid of all points to help with scale
-            point_positions = [Vector((point.xyz[0], point.xyz[1], point.xyz[2])) 
-                             for point in points3D.values()]
-            centroid = Vector((0, 0, 0))
-            if point_positions:
-                for pos in point_positions:
-                    centroid += pos
-                centroid /= len(point_positions)
-            
-            # Create camera objects
-            for image_id, image in images.items():
-                # Create camera object
-                cam_data = bpy.data.cameras.new(f"COLMAP_Camera_{image_id}")
-                cam_obj = bpy.data.objects.new(f"COLMAP_Camera_{image_id}", cam_data)
-                collection.objects.link(cam_obj)
-                
-                # Set camera parameters based on COLMAP camera model
-                camera = cameras[image.camera_id]
-                cam_data.lens_unit = 'MILLIMETERS'
-                
-                # Set focal length if available
-                if hasattr(camera, 'params') and len(camera.params) > 0:
-                    # Most camera models have focal length as first parameter
-                    focal_length_pixels = camera.params[0]
-                    sensor_width_mm = 36.0  # Standard full frame width
-                    focal_length_mm = (focal_length_pixels * sensor_width_mm) / camera.width
-                    cam_data.lens = focal_length_mm
-                
-                # Convert COLMAP rotation and translation to Blender matrix
-                R = qvec2rotmat(image.qvec)
-                rot_matrix = mathutils.Matrix((
-                    (R[0][0], R[0][1], R[0][2]),
-                    (R[1][0], R[1][1], R[1][2]),
-                    (R[2][0], R[2][1], R[2][2])
-                )).to_4x4()
-                
-                # Create translation matrix
-                trans_matrix = mathutils.Matrix.Translation((
-                    image.tvec[0], image.tvec[1], image.tvec[2]
-                ))
-                
-                # Combine to form camera transformation
-                transform = trans_matrix @ rot_matrix
-                
-                # Convert from COLMAP to Blender coordinate system
-                transform = coord_transform @ transform @ coord_transform.inverted()
-                
-                # Set the camera transformation
-                cam_obj.matrix_world = transform
-                
-                # Store COLMAP IDs as custom properties
-                cam_obj['colmap_image_id'] = image_id
-                cam_obj['colmap_camera_id'] = image.camera_id
-                
-                # Parent to root
-                cam_obj.parent = root
-            
-            # Create point cloud (for visualization only)
+            # Create point cloud first
             if points3D:
                 mesh = bpy.data.meshes.new("COLMAP_PointCloud")
                 obj = bpy.data.objects.new("COLMAP_PointCloud", mesh)
@@ -453,9 +396,8 @@ class SKY_SPLAT_OT_load_colmap_model(bpy.types.Operator):
                 verts = []
                 colors = []
                 for point_id, point in points3D.items():
-                    # Apply the same coordinate transformation to points
+                    # Apply coordinate transformation to point
                     point_vec = Vector((point.xyz[0], point.xyz[1], point.xyz[2]))
-                    # Transform the point to Blender's coordinate system
                     transformed_point = coord_transform @ point_vec
                     verts.append(transformed_point)
                     colors.append([c/255.0 for c in point.rgb])
@@ -470,29 +412,75 @@ class SKY_SPLAT_OT_load_colmap_model(bpy.types.Operator):
                     for i, c in enumerate(color_layer.data):
                         c.color = colors[i % len(colors)] + [1.0]  # RGBA
                 
-                # Parent to root - no need for extra transformation
+                # Parent to root directly without additional transformation
                 obj.parent = root
                 
                 # Tag point cloud
                 obj['colmap_points3D'] = True
-                
-                # Help visualize the model with some basic scaling
-                # This helps if the model is very small or very large
-                scale_factor = 1.0
-                if point_positions:
-                    # Calculate the average distance from centroid
-                    avg_dist = sum((p - centroid).length for p in point_positions) / len(point_positions)
-                    if avg_dist < 0.1:
-                        scale_factor = 10.0 / avg_dist  # Scale up if too small
-                    elif avg_dist > 100:
-                        scale_factor = 10.0 / avg_dist  # Scale down if too large
-                
-                    # Apply initial scaling to make model visible at a reasonable size
-                    if scale_factor != 1.0:
-                        root.scale = Vector((scale_factor, scale_factor, scale_factor))
             
-            # Create coordinate axis visualization to help with orientation
-            self.create_axis_visualization(root, collection)
+            # Create camera objects with CORRECTED camera transformation
+            for image_id, image in images.items():
+                # Create camera object
+                cam_data = bpy.data.cameras.new(f"COLMAP_Camera_{image_id}")
+                cam_obj = bpy.data.objects.new(f"COLMAP_Camera_{image_id}", cam_data)
+                collection.objects.link(cam_obj)
+                
+                # Set camera parameters based on COLMAP camera model
+                camera = cameras[image.camera_id]
+                cam_data.lens_unit = 'MILLIMETERS'
+                
+                # Set focal length if available
+                if hasattr(camera, 'params') and len(camera.params) > 0:
+                    focal_length_pixels = camera.params[0]
+                    sensor_width_mm = 36.0  # Standard full frame width
+                    focal_length_mm = (focal_length_pixels * sensor_width_mm) / camera.width
+                    cam_data.lens = focal_length_mm
+                
+                # *** IMPROVED CAMERA TRANSFORMATION ***
+                # In COLMAP, camera transform is world-to-camera, but Blender expects camera-to-world
+                
+                # Get rotation matrix
+                R = qvec2rotmat(image.qvec)
+                R = np.array(R)
+                
+                # Compute the inverse (transpose) of rotation
+                R_t = R.T
+                
+                # Get translation vector
+                t = np.array(image.tvec)
+                
+                # Compute camera center in world coordinates
+                cam_center = -R_t @ t
+                
+                # Convert rotation to Blender matrix
+                rotation = mathutils.Matrix((
+                    (R_t[0][0], R_t[0][1], R_t[0][2]),
+                    (R_t[1][0], R_t[1][1], R_t[1][2]),
+                    (R_t[2][0], R_t[2][1], R_t[2][2])
+                )).to_4x4()
+                
+                # Create translation matrix with camera center
+                translation = mathutils.Matrix.Translation(Vector((cam_center[0], cam_center[1], cam_center[2])))
+                
+                # Combine to form camera transformation (camera-to-world)
+                transform = translation @ rotation
+                
+                # Apply coordinate system transformation
+                transform = coord_transform @ transform @ coord_transform.inverted()
+                
+                # Set the camera transformation
+                cam_obj.matrix_world = transform
+                
+                # Store COLMAP IDs as custom properties
+                cam_obj['colmap_image_id'] = image_id
+                cam_obj['colmap_camera_id'] = image.camera_id
+                
+                # Store original quaternion and tvec for export
+                cam_obj['colmap_qvec'] = image.qvec.tolist()
+                cam_obj['colmap_tvec'] = image.tvec.tolist()
+                
+                # Parent to root
+                cam_obj.parent = root
             
             # Select the root object so user can transform it
             for obj in bpy.context.selected_objects:
@@ -506,21 +494,6 @@ class SKY_SPLAT_OT_load_colmap_model(bpy.types.Operator):
             self.report({'ERROR'}, f"Failed to load COLMAP model: {str(e)}")
             logger.error(f"Failed to load COLMAP model: {str(e)}", exc_info=True)
             return {'CANCELLED'}
-    
-    def create_axis_visualization(self, parent, collection, size=0.5):
-        """Create XYZ axis visualization to help with orientation"""
-        for axis, color, rot in zip(
-            ['X', 'Y', 'Z'], 
-            [(1,0,0,1), (0,1,0,1), (0,0,1,1)],
-            [(0, math.radians(90), 0), (math.radians(-90), 0, 0), (0, 0, 0)]
-        ):
-            line = bpy.data.objects.new(f"Axis_{axis}", None)
-            line.empty_display_type = 'SINGLE_ARROW'
-            line.empty_display_size = size
-            line.color = color
-            line.rotation_euler = rot
-            collection.objects.link(line)
-            line.parent = parent
         
 # Operator to export transformed COLMAP model
 class SKY_SPLAT_OT_export_colmap_model(bpy.types.Operator):
@@ -580,30 +553,41 @@ class SKY_SPLAT_OT_export_colmap_model(bpy.types.Operator):
                     obj = image_objects[image_id]
                     
                     # Get world transformation (includes the root transformation)
+                    # This is camera-to-world in Blender
                     world_matrix = obj.matrix_world
                     
                     # Convert from Blender to COLMAP coordinate system
                     colmap_matrix = coord_transform.inverted() @ world_matrix @ coord_transform
                     
-                    # Extract rotation and translation
+                    # Extract rotation and location
                     rot_matrix = colmap_matrix.to_3x3()
-                    location = colmap_matrix.to_translation()
+                    location = colmap_matrix.translation
+                    
+                    # Convert from camera-to-world to world-to-camera format for COLMAP
+                    R = np.array(rot_matrix)
+                    camera_center = np.array([location.x, location.y, location.z])
+                    
+                    # COLMAP's R is the inverse (transpose) of camera-to-world rotation
+                    R_colmap = R.T
+                    
+                    # COLMAP's t is -R_colmap * camera_center
+                    t_colmap = -R_colmap @ camera_center
                     
                     # Convert rotation matrix to quaternion using the COLMAP function
-                    qvec = rotmat2qvec(np.array(rot_matrix))
+                    qvec = rotmat2qvec(R_colmap)
                     
                     # Create a new Image object with updated transformation
                     images[image_id] = Image(
                         id=image.id,
                         qvec=qvec,
-                        tvec=np.array([location.x, location.y, location.z]),
+                        tvec=np.array(t_colmap),
                         camera_id=image.camera_id,
                         name=image.name,
                         xys=image.xys,
                         point3D_ids=image.point3D_ids
                     )
             
-            # Transform point cloud if needed (for visualization accuracy)
+            # Transform point cloud if needed
             point_cloud = None
             for obj in bpy.data.objects:
                 if 'colmap_points3D' in obj:
