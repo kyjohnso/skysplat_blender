@@ -564,13 +564,15 @@ class SKY_SPLAT_OT_export_colmap_model(bpy.types.Operator):
                     # Convert from Blender to COLMAP coordinate system
                     colmap_matrix = coord_transform.inverted() @ world_matrix @ coord_transform
                     
-                    # Extract rotation and location
-                    rot_matrix = colmap_matrix.to_3x3()
-                    location = colmap_matrix.translation
+                    # Decompose the matrix to get location, rotation, and scale separately
+                    loc, rot, scale = colmap_matrix.decompose()
                     
-                    # Convert from camera-to-world to world-to-camera format for COLMAP
+                    # Keep the scaled location (important!)
+                    camera_center = np.array([loc.x, loc.y, loc.z])
+                    
+                    # Normalize the rotation to remove scale influence (important!)
+                    rot_matrix = rot.to_matrix().normalized().to_3x3()
                     R = np.array(rot_matrix)
-                    camera_center = np.array([location.x, location.y, location.z])
                     
                     # COLMAP's R is the inverse (transpose) of camera-to-world rotation
                     R_colmap = R.T
@@ -612,7 +614,7 @@ class SKY_SPLAT_OT_export_colmap_model(bpy.types.Operator):
                     # Create a vector for the point
                     point_vec = Vector((point.xyz[0], point.xyz[1], point.xyz[2]))
                     
-                    # Apply the transformation
+                    # Apply the transformation (including scale)
                     transformed_point = pc_colmap_matrix @ point_vec
                     
                     # Create a new Point3D object with transformed position
@@ -627,44 +629,6 @@ class SKY_SPLAT_OT_export_colmap_model(bpy.types.Operator):
                 
                 # Replace the original points with transformed ones
                 points3D = transformed_points3D
-            
-            # Update camera intrinsics to account for scaling
-            # This is crucial for COLMAP to properly visualize cameras after scaling
-            if scale_factor != 1.0:
-                # Create new cameras with scaled intrinsics
-                scaled_cameras = {}
-                for camera_id, camera in cameras.items():
-                    params = list(camera.params)
-                    
-                    # Scale focal length and principal point parameters
-                    # The exact parameters to scale depend on the camera model
-                    if camera.model in ['SIMPLE_PINHOLE', 'PINHOLE', 'SIMPLE_RADIAL', 'RADIAL', 'OPENCV', 'FULL_OPENCV']:
-                        # For most models, first param is focal length
-                        params[0] *= scale_factor  # Scale focal length
-                        
-                        # If model has separate focal lengths for x and y
-                        if camera.model in ['PINHOLE', 'OPENCV', 'FULL_OPENCV'] and len(params) > 1:
-                            params[1] *= scale_factor  # Scale second focal length
-                        
-                        # Scale principal point (cx, cy) if present
-                        if camera.model in ['SIMPLE_PINHOLE', 'PINHOLE'] and len(params) > 2:
-                            params[2] *= scale_factor  # cx
-                            params[3] *= scale_factor  # cy
-                        elif camera.model in ['OPENCV', 'FULL_OPENCV'] and len(params) > 3:
-                            params[2] *= scale_factor  # cx
-                            params[3] *= scale_factor  # cy
-                    
-                    # Create new camera with scaled parameters
-                    scaled_cameras[camera_id] = Camera(
-                        id=camera.id,
-                        model=camera.model,
-                        width=camera.width,
-                        height=camera.height,
-                        params=np.array(params)
-                    )
-                
-                # Replace original cameras with scaled ones
-                cameras = scaled_cameras
             
             # Write the updated model
             write_model(cameras, images, points3D, export_dir)
