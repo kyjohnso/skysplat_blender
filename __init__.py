@@ -24,6 +24,8 @@ from .ui.colmap_panel import (
     SKY_SPLAT_PT_colmap_panel,
     SKY_SPLAT_OT_run_colmap,
     SKY_SPLAT_OT_sync_with_video,
+    SKY_SPLAT_OT_load_colmap_model,
+    SKY_SPLAT_OT_export_colmap_model,
 )
 
 classes = (
@@ -38,6 +40,8 @@ classes = (
     SKY_SPLAT_PT_colmap_panel,
     SKY_SPLAT_OT_run_colmap,
     SKY_SPLAT_OT_sync_with_video,
+    SKY_SPLAT_OT_load_colmap_model,
+    SKY_SPLAT_OT_export_colmap_model,
 )
 
 def register():
