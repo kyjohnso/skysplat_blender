@@ -26,7 +26,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 logger = logging.getLogger('SkySplat')
 
 # Panel version constant
-PANEL_VERSION = "0.4.1"
+PANEL_VERSION = "0.4.2"
 
 def get_default_colmap_path():
     """Get default COLMAP path based on operating system"""
@@ -289,11 +289,11 @@ class SKY_SPLAT_OT_run_colmap(bpy.types.Operator):
     
     @classmethod
     def poll(cls, context):
-        props = context.scene.colmap_props
+        props = context.scene.skysplat_colmap_props
         return props.input_folder and os.path.exists(props.input_folder) and props.output_folder
     
     def execute(self, context):
-        props = context.scene.colmap_props
+        props = context.scene.skysplat_colmap_props
         
         # Test if input folder contains images
         image_files = [f for f in os.listdir(props.input_folder) 
@@ -331,7 +331,7 @@ class SKY_SPLAT_OT_sync_with_video(bpy.types.Operator):
     bl_description = "Set paths based on video file name"
     
     def execute(self, context):
-        props = context.scene.colmap_props
+        props = context.scene.skysplat_colmap_props
         props.update_from_video_panel(context)
         self.report({'INFO'}, "COLMAP paths synchronized with video")
         return {'FINISHED'}
@@ -344,11 +344,11 @@ class SKY_SPLAT_OT_load_colmap_model(bpy.types.Operator):
     
     @classmethod
     def poll(cls, context):
-        props = context.scene.colmap_props
+        props = context.scene.skysplat_colmap_props
         return props.output_folder and os.path.exists(props.output_folder)
     
     def execute(self, context):
-        props = context.scene.colmap_props
+        props = context.scene.skysplat_colmap_props
         sparse_dir = os.path.join(props.output_folder, "sparse", "0")
         
         if not os.path.exists(sparse_dir):
@@ -506,12 +506,12 @@ class SKY_SPLAT_OT_export_colmap_model(bpy.types.Operator):
         # Check if COLMAP root exists in the scene
         for obj in bpy.data.objects:
             if 'colmap_root' in obj and 'colmap_model_path' in obj:
-                props = context.scene.colmap_props
+                props = context.scene.skysplat_colmap_props
                 return props.output_folder and os.path.exists(props.output_folder)
         return False
     
     def execute(self, context):
-        props = context.scene.colmap_props
+        props = context.scene.skysplat_colmap_props
         
         try:
             # Find the COLMAP root object
@@ -650,7 +650,7 @@ class SKY_SPLAT_PT_colmap_panel(bpy.types.Panel):
     
     def draw(self, context):
         layout = self.layout
-        props = context.scene.colmap_props
+        props = context.scene.skysplat_colmap_props
         
         # COLMAP executables and options
         box = layout.box()
@@ -716,9 +716,9 @@ classes = (
 def register():
     for cls in classes:
         bpy.utils.register_class(cls)
-    bpy.types.Scene.colmap_props = bpy.props.PointerProperty(type=SKY_SPLAT_ColmapProperties)
+    bpy.types.Scene.skysplat_colmap_props = bpy.props.PointerProperty(type=SKY_SPLAT_ColmapProperties)
 
 def unregister():
     for cls in reversed(classes):
         bpy.utils.unregister_class(cls)
-    del bpy.types.Scene.colmap_props
+    del bpy.types.Scene.skysplat_colmap_props
