@@ -3,7 +3,12 @@ import os
 import subprocess
 import threading
 import platform
+import logging
 from bpy.props import StringProperty, IntProperty, BoolProperty
+
+# Set up logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger('SkySplat.GaussianSplatting')
 
 PANEL_VERSION = "0.1.0"
 
@@ -158,6 +163,11 @@ class SKY_SPLAT_OT_run_gaussian_splatting(bpy.types.Operator):
         # Build command
         command = self.build_command(props)
         
+        # Log the full command
+        command_str = ' '.join(command)
+        logger.info(f"Running 3DGS command: {command_str}")
+        print(f"3DGS Command: {command_str}")  # Also print to console for visibility
+        
         # Start training in a separate thread
         self._finished = False
         self._thread = threading.Thread(target=self.run_training, args=(command, props))
@@ -235,11 +245,14 @@ class SKY_SPLAT_OT_run_gaussian_splatting(bpy.types.Operator):
             self._process.wait()
             
             if self._process.returncode == 0:
+                logger.info("Gaussian Splatting training completed successfully!")
                 print("Gaussian Splatting training completed successfully!")
             else:
+                logger.error(f"Gaussian Splatting training failed with code: {self._process.returncode}")
                 print(f"Gaussian Splatting training failed with code: {self._process.returncode}")
             
         except Exception as e:
+            logger.error(f"Error running Gaussian Splatting: {str(e)}")
             print(f"Error running Gaussian Splatting: {str(e)}")
         finally:
             self._finished = True
