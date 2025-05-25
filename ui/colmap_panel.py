@@ -175,13 +175,13 @@ class SKY_SPLAT_ColmapProperties(bpy.types.PropertyGroup):
     apply_transform_on_import: bpy.props.BoolProperty(
         name="Apply Coordinate Transform on Import",
         description="Convert COLMAP coordinates to Blender coordinate system when importing",
-        default=True
+        default=False
     )
     
     apply_transform_on_export: bpy.props.BoolProperty(
         name="Apply Coordinate Transform on Export",
         description="Convert Blender coordinates back to COLMAP coordinate system when exporting",
-        default=True
+        default=False
     )
     
     def update_from_video_panel(self, context):
