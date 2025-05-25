@@ -26,7 +26,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 logger = logging.getLogger('SkySplat')
 
 # Panel version constant
-PANEL_VERSION = "0.4.3"
+PANEL_VERSION = "0.4.4"
 
 def get_default_colmap_path():
     """Get default COLMAP path based on operating system"""
@@ -557,7 +557,7 @@ class SKY_SPLAT_OT_export_colmap_model(bpy.types.Operator):
             should_apply_export_transform = props.apply_transform_on_export
             
             # Create transformed_sparse directory
-            export_dir = os.path.join(props.output_folder, "transformed_sparse", "0")
+            export_dir = os.path.join(props.output_folder, "transformed","sparse", "0")
             os.makedirs(export_dir, exist_ok=True)
             
             # Read the original model
