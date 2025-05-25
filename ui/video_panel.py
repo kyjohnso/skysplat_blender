@@ -25,8 +25,8 @@ def update_srt_path(self, context):
         update_output_folder(self, context)
 
         # Update COLMAP paths if that property group exists
-        if hasattr(context.scene, 'colmap_props'):
-            context.scene.colmap_props.update_from_video_panel(context)
+        if hasattr(context.scene, 'skysplat_colmap_props'):
+            context.scene.skysplat_colmap_props.update_from_video_panel(context)
 
 def update_output_folder(self, context):
     """Set default output folder based on video path"""
@@ -199,8 +199,8 @@ class SKY_SPLAT_OT_extract_frames(bpy.types.Operator):
             self.report({'INFO'}, f"Successfully extracted {frame_count} frames to {output_folder}")
             
             # After successful extraction, update COLMAP paths
-            if hasattr(context.scene, 'colmap_props'):
-                context.scene.colmap_props.update_from_video_panel(context)
+            if hasattr(context.scene, 'skysplat_colmap_props'):
+                context.scene.skysplat_colmap_props.update_from_video_panel(context)
 
             return {'FINISHED'}
             
@@ -227,6 +227,7 @@ class SKY_SPLAT_PT_video_panel(bpy.types.Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "SkySplat"
+    bl_options = {'DEFAULT_CLOSED'}
 
     def draw(self, context):
         layout = self.layout

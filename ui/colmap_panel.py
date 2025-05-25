@@ -26,7 +26,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 logger = logging.getLogger('SkySplat')
 
 # Panel version constant
-PANEL_VERSION = "0.4.3"
+PANEL_VERSION = "0.4.4"
 
 def get_default_colmap_path():
     """Get default COLMAP path based on operating system"""
@@ -175,13 +175,13 @@ class SKY_SPLAT_ColmapProperties(bpy.types.PropertyGroup):
     apply_transform_on_import: bpy.props.BoolProperty(
         name="Apply Coordinate Transform on Import",
         description="Convert COLMAP coordinates to Blender coordinate system when importing",
-        default=True
+        default=False
     )
     
     apply_transform_on_export: bpy.props.BoolProperty(
         name="Apply Coordinate Transform on Export",
         description="Convert Blender coordinates back to COLMAP coordinate system when exporting",
-        default=True
+        default=False
     )
     
     def update_from_video_panel(self, context):
@@ -557,7 +557,7 @@ class SKY_SPLAT_OT_export_colmap_model(bpy.types.Operator):
             should_apply_export_transform = props.apply_transform_on_export
             
             # Create transformed_sparse directory
-            export_dir = os.path.join(props.output_folder, "transformed_sparse", "0")
+            export_dir = os.path.join(props.output_folder, "transformed","sparse", "0")
             os.makedirs(export_dir, exist_ok=True)
             
             # Read the original model
@@ -723,6 +723,7 @@ class SKY_SPLAT_PT_colmap_panel(bpy.types.Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "SkySplat"
+    bl_options = {'DEFAULT_CLOSED'}
     
     def draw(self, context):
         layout = self.layout
