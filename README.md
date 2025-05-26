@@ -2,7 +2,7 @@
 
 # SkySplat: 3DGS Blender Toolkit
 
-SkySplat is a powerful Blender addon that simplifies the workflow for creating 3D Gaussian Splats from drone footage. It provides a comprehensive set of tools to streamline the process from video import to frame extraction and COLMAP integration.
+SkySplat is a Blender addon that simplifies the workflow for creating 3D Gaussian Splats from drone footage. It provides a comprehensive set of tools to streamline the process from video import to frame extraction, and loose integration of Blender with COLMAP and GraphDeco-INRIA's gaussian splatting repo.
 
 ## Features
 
@@ -11,31 +11,56 @@ SkySplat is a powerful Blender addon that simplifies the workflow for creating 3
   - Automatic detection and loading of SRT metadata files
   - Smart path management for project organization
 
-- **Intelligent Frame Extraction**
+- **Automatic Frame Extraction**
   - Extract frames with customizable parameters (start, end, step)
   - Automatic output folder creation based on video filename
   - Optimized for aerial footage processing
 
 - **COLMAP Integration**
-  - Seamless workflow between Blender and COLMAP
+  - A loose integration between COLMAP and Blender, arrange files and launch COLMAP from Blender
   - Path synchronization between video processing and reconstruction
-  - Streamlined photogrammetry process
 
-## Installation
-
-1. Download the latest release from code button (see below)
-
-<img src="images/download_zip.png" width="400" alt="Description">
-
-3. Open Blender and navigate to Edit → Preferences → Add-ons
-4. Click "Install..." and select the downloaded ZIP file
-5. Enable the addon by checking the box next to "3D View: SkySplat: 3DGS Blender Toolkit"
+- **Gaussian Splatting Integration**
+  - A loose integration of GraphDeco-INRIA's [gaussian-splatting](https://github.com/graphdeco-inria/gaussian-splatting) repository.
+  - Configuration of gaussian-splatting training from Blender
+  - Running of gaussian-splatting in a subprocess
 
 ## Requirements
 
 - Blender 4.0.0 or newer
 - COLMAP (for reconstruction features)
 - [Gaussian Splatting](https://github.com/graphdeco-inria/gaussian-splatting)
+
+## Installation
+
+1. Install COLMAP - [COLMAP](https://colmap.github.io/) Structure From Motion library and application is available from a wide variety of OS repositories. You can also download it and build it from source per the instructions on their home page. For calling from skysplat_blender, the path to the colmap executable will need to be known.
+
+2. Install GraphDeco-INRIA's [gaussian-splatting](https://github.com/graphdeco-inria/gaussian-splatting) python package
+   1. clone the repository
+   ```
+   git clone git@github.com:graphdeco-inria/gaussian-splatting.git --recursive
+   cd gaussian-splatting
+   ```
+   2. Create a virtual environment to separate from your os python environment
+   ```
+   python3 -m venv venv
+   source venv/bin/activate
+   ```
+   3. Pip install the dependencies
+   ```
+   pip install plyfile tqdm
+   pip install submodules/diff-gaussian-rasterization
+   pip install submodules/simple-knn
+   ```
+   4. Note where you cloned the code to and where the virtual environment directory is located, these will be needed in blender to call the gaussian-splatting software
+
+2. Download the latest release from code button (see below)
+
+<img src="images/download_zip.png" width="400" alt="Description">
+
+3. Open Blender and navigate to Edit → Preferences → Add-ons
+4. Click "Install..." and select the downloaded ZIP file
+5. Enable the addon by checking the box next to "3D View: SkySplat: 3DGS Blender Toolkit"
 
 ## Usage
 
