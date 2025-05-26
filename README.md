@@ -11,19 +11,27 @@ SkySplat is a Blender addon that simplifies the workflow for creating 3D Gaussia
   - Automatic detection and loading of SRT metadata files
   - Smart path management for project organization
 
+  ![video_import](images/silo_video_import.png)
+
 - **Automatic Frame Extraction**
   - Extract frames with customizable parameters (start, end, step)
   - Automatic output folder creation based on video filename
   - Optimized for aerial footage processing
 
+  ![frame_extraction](images/silo_frame_capture.png)
+
 - **COLMAP Integration**
   - A loose integration between COLMAP and Blender, arrange files and launch COLMAP from Blender
   - Path synchronization between video processing and reconstruction
+
+  ![colmap_and_blender](images/silo_colmap_and_blender.png)
 
 - **Gaussian Splatting Integration**
   - A loose integration of GraphDeco-INRIA's [gaussian-splatting](https://github.com/graphdeco-inria/gaussian-splatting) repository.
   - Configuration of gaussian-splatting training from Blender
   - Running of gaussian-splatting in a subprocess
+
+  ![gaussian_splatting](images/silo_colmap_and_3dgs_6.png)
 
 ## Requirements
 
@@ -62,9 +70,7 @@ SkySplat is a Blender addon that simplifies the workflow for creating 3D Gaussia
 4. Click "Install..." and select the downloaded ZIP file
 5. Enable the addon by checking the box next to "3D View: SkySplat: 3DGS Blender Toolkit"
 
-## Usage
-
-<img src="images/skysplat_pannel.png" width="400" alt="Description">
+## Example Workflow Run Through
 
 1. **Accessing the Toolkit**
    - Open the sidebar in the 3D View (press N)
