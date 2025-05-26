@@ -10,7 +10,17 @@ from bpy.props import StringProperty, IntProperty, BoolProperty
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger('SkySplat.GaussianSplatting')
 
-PANEL_VERSION = "0.1.0"
+PANEL_VERSION = "0.3.0"
+
+def update_ui_refresh(self, context):
+    """Force UI refresh when properties change"""
+    # Force redraw of all areas
+    for window in bpy.context.window_manager.windows:
+        for area in window.screen.areas:
+            area.tag_redraw()
+    
+    # Force depsgraph update to trigger operator poll re-evaluation
+    bpy.context.evaluated_depsgraph_get().update()
 
 class SKY_SPLAT_GaussianSplattingProperties(bpy.types.PropertyGroup):
     """Properties for Gaussian Splatting processing"""
@@ -20,7 +30,8 @@ class SKY_SPLAT_GaussianSplattingProperties(bpy.types.PropertyGroup):
         name="3DGS Repository Path",
         description="Path to the gaussian-splatting repository folder",
         subtype='DIR_PATH',
-        default=""
+        default="",
+        update=update_ui_refresh
     )
     
     # Python environment settings
@@ -34,7 +45,8 @@ class SKY_SPLAT_GaussianSplattingProperties(bpy.types.PropertyGroup):
         name="Virtual Environment Path",
         description="Path to the Python virtual environment (leave empty to use repo's venv)",
         subtype='DIR_PATH',
-        default=""
+        default="",
+        update=update_ui_refresh
     )
     
     # Training parameters
@@ -42,21 +54,24 @@ class SKY_SPLAT_GaussianSplattingProperties(bpy.types.PropertyGroup):
         name="Source Path (-s)",
         description="Path to COLMAP output folder",
         subtype='DIR_PATH',
-        default=""
+        default="",
+        update=update_ui_refresh
     )
     
     images_path: StringProperty(
         name="Images Path (-i)",
         description="Path to input images folder",
         subtype='DIR_PATH',
-        default=""
+        default="",
+        update=update_ui_refresh
     )
     
     model_path: StringProperty(
         name="Model Output Path (-m)",
         description="Path where the trained model will be saved",
         subtype='DIR_PATH',
-        default=""
+        default="",
+        update=update_ui_refresh
     )
     
     resolution: IntProperty(
