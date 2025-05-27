@@ -1,8 +1,8 @@
 bl_info = {
     "name": "SkySplat: 3DGS Blender Toolkit",
-    "author": "Your Name",
+    "author": "Kyle Johnson",
     "version": (0, 1, 0),
-    "blender": (3, 0, 0),
+    "blender": (4, 0, 0),
     "location": "View3D > Sidebar > SkySplat",
     "description": "Workflow tools for 3D Gaussian Splatting using Blender and COLMAP",
     "category": "3D View",
