@@ -104,7 +104,7 @@ class SKY_SPLAT_GaussianSplattingProperties(bpy.types.PropertyGroup):
                 self.source_path = colmap_props.output_folder
                 
                 # Set images path to the input subfolder
-                self.images_path = os.path.join(colmap_props.output_folder, "input")
+                self.images_path = os.path.join(colmap_props.output_folder, "images")
                 
                 # Create gaussian splatting output folder
                 video_props = context.scene.skysplat_props
