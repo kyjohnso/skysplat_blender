@@ -104,7 +104,7 @@ SkySplat is a Blender addon that simplifies the workflow for creating 3D Gaussia
 3. Open Blender and navigate to Edit → Preferences → Add-ons
 4. Click "Install..." and select the downloaded ZIP file
 5. Enable the addon by checking the box next to "3D View: SkySplat: 3DGS Blender Toolkit"
-
+---
 ## Example Workflow Run Through
 
 1. **Accessing the Toolkit**
@@ -112,8 +112,8 @@ SkySplat is a Blender addon that simplifies the workflow for creating 3D Gaussia
    - Select the "SkySplat" tab
 
 2. **Loading Drone Footage**
-   - You can download the example video used in this walkthrough at 
-   - Select your video file in the "Video File" field
+   - You can download the example video used in this walkthrough at [windsor_silo](https://skysplat.net/DJI_20240730101124_0020_D_windsor_silo.MP4) (right click and save as)
+   - Select your video file in the "Video File" field in the 3D Viewport
    - If available, the SRT metadata file will be detected automatically
    - Click "Load Video and SRT" to import into the Video Sequencer
 
