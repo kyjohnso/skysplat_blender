@@ -50,7 +50,7 @@ SkySplat is a Blender addon that simplifies the workflow for creating 3D Gaussia
    git clone git@github.com:graphdeco-inria/gaussian-splatting.git --recursive
    cd gaussian-splatting
    ```
-   2. Virtual Environment - I highly recommend installing 
+   2. Virtual Environment - I highly recommend installing the gaussian-splatting software in a virtual environment to avoid conflicts with other python packages you may have installed. Here is how you would create and activate a virtual environment in bash:
    ```
    python3 -m venv venv
    source venv/bin/activate
