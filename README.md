@@ -4,6 +4,8 @@
 
 SkySplat is a Blender addon that simplifies the workflow for creating 3D Gaussian Splats from drone footage. It provides a comprehensive set of tools to streamline the process from video import to frame extraction, and loose integration of Blender with COLMAP and GraphDeco-INRIA's gaussian splatting repo.
 
+![pumproom_7000_5](images/pumproom_7000_5.png)
+
 ## Features
 
 - **Video Import & Management**
