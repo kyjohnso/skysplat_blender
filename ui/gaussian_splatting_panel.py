@@ -12,6 +12,32 @@ logger = logging.getLogger('SkySplat.GaussianSplatting')
 
 PANEL_VERSION = "0.3.0"
 
+def get_default_gs_repo_path():
+    """Get default 3DGS repository path based on operating system"""
+    system = platform.system()
+    
+    if system == "Linux":
+        return os.path.expanduser("~/projects/gaussian-splatting")
+    elif system == "Darwin":  # macOS
+        return os.path.expanduser("~/projects/gaussian-splatting")
+    elif system == "Windows":
+        return os.path.expanduser("~/projects/gaussian-splatting")
+    
+    return ""
+
+def get_default_venv_path():
+    """Get default virtual environment path based on operating system"""
+    system = platform.system()
+    
+    if system == "Linux":
+        return os.path.expanduser("~/projects/gaussian-splatting/venv")
+    elif system == "Darwin":  # macOS
+        return os.path.expanduser("~/projects/gaussian-splatting/venv")
+    elif system == "Windows":
+        return os.path.expanduser("~/projects/gaussian-splatting/venv")
+    
+    return ""
+
 def update_ui_refresh(self, context):
     """Force UI refresh when properties change"""
     # Force redraw of all areas
@@ -30,7 +56,7 @@ class SKY_SPLAT_GaussianSplattingProperties(bpy.types.PropertyGroup):
         name="3DGS Repository Path",
         description="Path to the gaussian-splatting repository folder",
         subtype='DIR_PATH',
-        default="",
+        default=get_default_gs_repo_path(),
         update=update_ui_refresh
     )
     
@@ -45,7 +71,7 @@ class SKY_SPLAT_GaussianSplattingProperties(bpy.types.PropertyGroup):
         name="Virtual Environment Path",
         description="Path to the Python virtual environment (leave empty to use repo's venv)",
         subtype='DIR_PATH',
-        default="",
+        default=get_default_venv_path(),
         update=update_ui_refresh
     )
     
@@ -76,7 +102,7 @@ class SKY_SPLAT_GaussianSplattingProperties(bpy.types.PropertyGroup):
     
     resolution: IntProperty(
         name="Resolution (-r)",
-        description="Resolution for training",
+        description="Image resolution for training; 2, 4, 8 = divide native resolution by this, anything else = resolution to resample to",
         default=3000,
         min=1
     )
@@ -100,11 +126,15 @@ class SKY_SPLAT_GaussianSplattingProperties(bpy.types.PropertyGroup):
             colmap_props = context.scene.skysplat_colmap_props
             
             if colmap_props.output_folder:
-                # Set source path to COLMAP output
-                self.source_path = colmap_props.output_folder
+                # Set source path to COLMAP transformed output
+                transformed_path = os.path.join(colmap_props.output_folder, "transformed")
+                if os.path.exists(transformed_path):
+                    self.source_path = transformed_path
+                else:
+                    self.source_path = colmap_props.output_folder
                 
-                # Set images path to the input subfolder
-                self.images_path = os.path.join(colmap_props.output_folder, "images")
+                # Set images path to the input subfolder (COLMAP standard structure)
+                self.images_path = os.path.join(colmap_props.output_folder, "input")
                 
                 # Create gaussian splatting output folder
                 video_props = context.scene.skysplat_props
@@ -113,6 +143,7 @@ class SKY_SPLAT_GaussianSplattingProperties(bpy.types.PropertyGroup):
                     video_dir = os.path.dirname(video_path)
                     video_name = os.path.splitext(os.path.basename(video_path))[0]
                     self.model_path = os.path.join(video_dir, f"{video_name}_gaussian_splatting_output")
+
 
 
 class SKY_SPLAT_OT_sync_gs_with_colmap(bpy.types.Operator):
