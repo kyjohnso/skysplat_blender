@@ -200,6 +200,12 @@ If you have any ideas for further features, or bug reports, or want to help work
 SkySplat_blender is licensed under the MIT License. A single file was forked from [COLMAP](https://colmap.github.io/) (utils/read_write_model.py) and it retains the original copyright. None of the code from [Gaussian Splatting](https://github.com/graphdeco-inria/gaussian-splatting) is included in this repo, however, we loosly integrate with it and all of its copyright and license conditions should be adhered to.
 
 
+## Future Work
+
+I am currently in the progress of updating this Addon to use the rust based [brush](https://github.com/ArthurBrussee/brush) app. Since it is rust based I can distribute the binary with the addon, plus it has a much better license than the current implementation.
+
+![pumproom_brush_5000](images/pumproom_brush_50000.png)
+
 ## Acknowledgments
 
 Without these open source (or source available in one case) projects, I would have nothing in this project. If you find this workflow useful, please consider giving these projects a star or following them on GitHub to stay updated with their development.
