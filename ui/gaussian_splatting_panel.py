@@ -251,19 +251,24 @@ class SkySplatBrushProperties(PropertyGroup):
         """Update paths from COLMAP panel settings"""
         if hasattr(context.scene, 'skysplat_colmap_props'):
             colmap_props = context.scene.skysplat_colmap_props
-            if colmap_props.output_path:
-                # Use transformed model if it exists, otherwise use sparse model
-                transformed_path = os.path.join(colmap_props.output_path, "transformed")
-                if os.path.exists(transformed_path):
-                    self.source_path = transformed_path
+            if colmap_props.output_folder:
+                # Prioritize brush_dataset if it exists
+                brush_dataset_path = os.path.join(colmap_props.output_folder, "brush_dataset")
+                if os.path.exists(brush_dataset_path):
+                    self.source_path = brush_dataset_path
                 else:
-                    sparse_path = os.path.join(colmap_props.output_path, "sparse", "0")
-                    if os.path.exists(sparse_path):
-                        self.source_path = sparse_path
+                    # Use transformed model if it exists, otherwise use sparse model
+                    transformed_path = os.path.join(colmap_props.output_folder, "transformed")
+                    if os.path.exists(transformed_path):
+                        self.source_path = transformed_path
+                    else:
+                        sparse_path = os.path.join(colmap_props.output_folder, "sparse", "0")
+                        if os.path.exists(sparse_path):
+                            self.source_path = sparse_path
                 
                 # Set export path
                 if not self.export_path:
-                    self.export_path = os.path.join(colmap_props.output_path, "brush_output")
+                    self.export_path = os.path.join(colmap_props.output_folder, "brush_output")
 
 class SKY_SPLAT_OT_sync_brush_with_colmap(Operator):
     bl_idname = "skysplat.sync_brush_with_colmap"
