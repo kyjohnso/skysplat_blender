@@ -26,7 +26,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 logger = logging.getLogger('SkySplat')
 
 # Panel version constant
-PANEL_VERSION = "0.4.4"
+PANEL_VERSION = "0.5.0"
 
 def get_default_colmap_path():
     """Get default COLMAP path based on operating system"""
@@ -345,6 +345,107 @@ class SKY_SPLAT_OT_run_colmap(bpy.types.Operator):
             return {'FINISHED'}
         except Exception as e:
             self.report({'ERROR'}, f"COLMAP processing failed: {str(e)}")
+            return {'CANCELLED'}
+
+
+class SKY_SPLAT_OT_prepare_brush_dataset(bpy.types.Operator):
+    bl_idname = "skysplat.prepare_brush_dataset"
+    bl_label = "Prepare Brush Dataset"
+    bl_description = "Create a properly structured dataset for Brush with transformed model and images"
+    
+    @classmethod
+    def poll(cls, context):
+        # Check if transformed model exists
+        props = context.scene.skysplat_colmap_props
+        if not props.output_folder:
+            return False
+        transformed_sparse = os.path.join(props.output_folder, "transformed", "sparse", "0")
+        images_dir = os.path.join(props.output_folder, "images")
+        return os.path.exists(transformed_sparse) and os.path.exists(images_dir)
+    
+    def execute(self, context):
+        props = context.scene.skysplat_colmap_props
+        
+        try:
+            # Define paths
+            base_output = props.output_folder
+            transformed_sparse_src = os.path.join(base_output, "transformed", "sparse", "0")
+            images_src = os.path.join(base_output, "images")
+            
+            # Create brush dataset directory
+            brush_dataset_dir = os.path.join(base_output, "brush_dataset")
+            os.makedirs(brush_dataset_dir, exist_ok=True)
+            
+            # Create sparse directory structure
+            brush_sparse_dir = os.path.join(brush_dataset_dir, "sparse", "0")
+            os.makedirs(brush_sparse_dir, exist_ok=True)
+            
+            # Create images directory
+            brush_images_dir = os.path.join(brush_dataset_dir, "images")
+            os.makedirs(brush_images_dir, exist_ok=True)
+            
+            # Copy sparse model files
+            sparse_files = ['cameras.bin', 'images.bin', 'points3D.bin']
+            for filename in sparse_files:
+                src_file = os.path.join(transformed_sparse_src, filename)
+                dst_file = os.path.join(brush_sparse_dir, filename)
+                if os.path.exists(src_file):
+                    shutil.copy2(src_file, dst_file)
+                    logger.info(f"Copied {filename} to brush dataset")
+                else:
+                    # Try .txt versions if .bin doesn't exist
+                    txt_filename = filename.replace('.bin', '.txt')
+                    src_file = os.path.join(transformed_sparse_src, txt_filename)
+                    dst_file = os.path.join(brush_sparse_dir, txt_filename)
+                    if os.path.exists(src_file):
+                        shutil.copy2(src_file, dst_file)
+                        logger.info(f"Copied {txt_filename} to brush dataset")
+            
+            # Create symbolic links or copy images (depending on OS)
+            if platform.system() == "Windows":
+                # On Windows, copy images (symbolic links can be problematic)
+                for filename in os.listdir(images_src):
+                    if filename.lower().endswith(('.jpg', '.jpeg', '.png')):
+                        src_file = os.path.join(images_src, filename)
+                        dst_file = os.path.join(brush_images_dir, filename)
+                        if not os.path.exists(dst_file):
+                            shutil.copy2(src_file, dst_file)
+            else:
+                # On Unix-like systems, create symbolic links to save space
+                try:
+                    # Remove existing link if it exists
+                    if os.path.islink(brush_images_dir):
+                        os.unlink(brush_images_dir)
+                    elif os.path.exists(brush_images_dir):
+                        shutil.rmtree(brush_images_dir)
+                    
+                    # Create symbolic link
+                    os.symlink(os.path.abspath(images_src), brush_images_dir)
+                    logger.info("Created symbolic link to images directory")
+                except OSError:
+                    # Fall back to copying if symbolic link fails
+                    for filename in os.listdir(images_src):
+                        if filename.lower().endswith(('.jpg', '.jpeg', '.png')):
+                            src_file = os.path.join(images_src, filename)
+                            dst_file = os.path.join(brush_images_dir, filename)
+                            if not os.path.exists(dst_file):
+                                shutil.copy2(src_file, dst_file)
+            
+            self.report({'INFO'}, f"Brush dataset prepared at: {brush_dataset_dir}")
+            
+            # Auto-update the Gaussian Splatting panel if it exists
+            if hasattr(context.scene, 'skysplat_brush_props'):
+                brush_props = context.scene.skysplat_brush_props
+                brush_props.source_path = brush_dataset_dir
+                if not brush_props.export_path:
+                    brush_props.export_path = os.path.join(base_output, "brush_output")
+                self.report({'INFO'}, "Updated Brush panel with dataset path")
+            
+            return {'FINISHED'}
+            
+        except Exception as e:
+            self.report({'ERROR'}, f"Failed to prepare Brush dataset: {str(e)}")
+            logger.error(f"Failed to prepare Brush dataset: {str(e)}", exc_info=True)
             return {'CANCELLED'}
 
 
@@ -790,6 +891,23 @@ class SKY_SPLAT_PT_colmap_panel(bpy.types.Panel):
             # Export model button
             box.operator("skysplat.export_colmap_model", icon='EXPORT')
         
+        # Brush dataset preparation section
+        box = layout.box()
+        box.label(text="Brush Dataset Preparation")
+        
+        # Check if we can prepare brush dataset
+        can_prepare_brush = False
+        if props.output_folder:
+            transformed_sparse = os.path.join(props.output_folder, "transformed", "sparse", "0")
+            images_dir = os.path.join(props.output_folder, "images")
+            can_prepare_brush = os.path.exists(transformed_sparse) and os.path.exists(images_dir)
+        
+        if can_prepare_brush:
+            box.operator("skysplat.prepare_brush_dataset", icon='PACKAGE')
+            box.label(text="Creates: output_folder/brush_dataset/", icon='INFO')
+        else:
+            box.label(text="Export transformed model first", icon='ERROR')
+        
         # Version indicator at the bottom
         row = layout.row()
         row.alignment = 'RIGHT'
@@ -803,6 +921,7 @@ classes = (
     SKY_SPLAT_OT_sync_with_video,
     SKY_SPLAT_OT_load_colmap_model,
     SKY_SPLAT_OT_export_colmap_model,
+    SKY_SPLAT_OT_prepare_brush_dataset,  
     SKY_SPLAT_PT_colmap_panel,
 )
 

@@ -26,6 +26,7 @@ from .ui.colmap_panel import (
     SKY_SPLAT_OT_sync_with_video,
     SKY_SPLAT_OT_load_colmap_model,
     SKY_SPLAT_OT_export_colmap_model,
+    SKY_SPLAT_OT_prepare_brush_dataset,
 )
 
 # Import classes from gaussian splatting panel
@@ -49,6 +50,7 @@ classes = (
     SKY_SPLAT_OT_sync_with_video,
     SKY_SPLAT_OT_load_colmap_model,
     SKY_SPLAT_OT_export_colmap_model,
+    SKY_SPLAT_OT_prepare_brush_dataset,
     # Gaussian Splatting panel
     SkySplatBrushProperties,  # Changed
     SKY_SPLAT_PT_gaussian_splatting_panel,  # Same name
