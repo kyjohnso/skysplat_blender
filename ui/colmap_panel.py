@@ -879,7 +879,7 @@ class SKY_SPLAT_OT_export_colmap_model(bpy.types.Operator):
 
 # Update the panel to include model import/export UI
 class SKY_SPLAT_PT_colmap_panel(bpy.types.Panel):
-    bl_label = "SkySplat COLMAP"
+    bl_label = "SkySplat - Structure from Motion (COLMAP)"
     bl_idname = "SKY_SPLAT_PT_colmap_panel"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
