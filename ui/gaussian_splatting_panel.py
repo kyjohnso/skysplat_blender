@@ -508,9 +508,9 @@ class SKY_SPLAT_OT_run_brush_training(Operator):
         finally:
             self._finished = True
 
-class SKY_SPLAT_PT_gaussian_splatting_panel(Panel):  # Keep same name
-    bl_label = "SkySplat 3DGS"  # Keep same label
-    bl_idname = "SKY_SPLAT_PT_gaussian_splatting_panel"  # Keep same ID
+class SKY_SPLAT_PT_gaussian_splatting_panel(Panel):  
+    bl_label = "SkySplat - Gaussian Splatting (Brush)"  
+    bl_idname = "SKY_SPLAT_PT_gaussian_splatting_panel"  
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "SkySplat"
