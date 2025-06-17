@@ -32,13 +32,27 @@ def update_export_path_from_source(self, context):
             parent_dir = os.path.dirname(os.path.dirname(self.source_path))
             self.export_path = os.path.join(parent_dir, "brush_output")
 
+def get_default_brush_path():
+    """Get default brush executable path based on operating system"""
+    system = platform.system()
+    home = os.path.expanduser("~")
+    
+    if system == "Windows":
+        return os.path.join(home, "projects", "brush", "target", "release", "brush_app.exe")
+    elif system == "Darwin":  # macOS
+        return os.path.join(home, "projects", "brush", "target", "release", "brush_app")
+    elif system == "Linux":
+        return os.path.join(home, "projects", "brush", "target", "release", "brush_app")
+    
+    return ""
+
 class SkySplatBrushProperties(PropertyGroup):
     # Brush executable path
     brush_executable: StringProperty(
         name="Brush Executable",
         description="Path to the brush executable",
         subtype='FILE_PATH',
-        default="brush_app"
+        default=get_default_brush_path()
     )
     
     # Path settings
