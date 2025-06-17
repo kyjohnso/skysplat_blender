@@ -12,9 +12,25 @@ PANEL_VERSION = "0.2.0-brush"
 def update_export_path_from_source(self, context):
     """Auto-update export path when source path changes"""
     if self.source_path and not self.export_path:
-        # Set export path to a brush_output folder next to the source
-        parent_dir = os.path.dirname(os.path.dirname(self.source_path))
-        self.export_path = os.path.join(parent_dir, "brush_output")
+        # Try to extract video name from the source path structure
+        # Source path could be something like: /path/to/video_name_colmap_output/transformed
+        source_parts = self.source_path.split(os.sep)
+        
+        # Look for a folder that ends with '_colmap_output'
+        video_name = None
+        parent_dir = None
+        for i, part in enumerate(source_parts):
+            if part.endswith('_colmap_output'):
+                video_name = part[:-14]  # Remove '_colmap_output' suffix
+                parent_dir = os.sep.join(source_parts[:i])
+                break
+        
+        if video_name and parent_dir:
+            self.export_path = os.path.join(parent_dir, f"{video_name}_brush_output")
+        else:
+            # Fallback to a brush_output folder next to the source
+            parent_dir = os.path.dirname(os.path.dirname(self.source_path))
+            self.export_path = os.path.join(parent_dir, "brush_output")
 
 class SkySplatBrushProperties(PropertyGroup):
     # Brush executable path
@@ -266,9 +282,18 @@ class SkySplatBrushProperties(PropertyGroup):
                         if os.path.exists(sparse_path):
                             self.source_path = sparse_path
                 
-                # Set export path
+                # Set export path with video name prefix
                 if not self.export_path:
-                    self.export_path = os.path.join(colmap_props.output_folder, "brush_output")
+                    # Extract video name from colmap output folder path
+                    # colmap_output_folder typically follows pattern: {video_name}_colmap_output
+                    output_folder_name = os.path.basename(colmap_props.output_folder)
+                    if output_folder_name.endswith('_colmap_output'):
+                        video_name = output_folder_name[:-14]  # Remove '_colmap_output' suffix
+                        parent_dir = os.path.dirname(colmap_props.output_folder)
+                        self.export_path = os.path.join(parent_dir, f"{video_name}_brush_output")
+                    else:
+                        # Fallback to generic name if pattern doesn't match
+                        self.export_path = os.path.join(colmap_props.output_folder, "brush_output")
 
 class SKY_SPLAT_OT_sync_brush_with_colmap(Operator):
     bl_idname = "skysplat.sync_brush_with_colmap"
