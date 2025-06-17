@@ -596,11 +596,14 @@ class SKY_SPLAT_OT_load_colmap_model(bpy.types.Operator):
                 # Tag point cloud
                 obj['colmap_points3D'] = True
             
-            # Create camera objects with optional coordinate transformation
+            # Create camera objects with original image names
             for image_id, image in images.items():
-                # Create camera object
-                cam_data = bpy.data.cameras.new(f"COLMAP_Camera_{image_id}")
-                cam_obj = bpy.data.objects.new(f"COLMAP_Camera_{image_id}", cam_data)
+                # Use the original image filename (without extension) for the camera name
+                image_basename = os.path.splitext(image.name)[0]  # Remove file extension
+                
+                # Create camera object with the original image name
+                cam_data = bpy.data.cameras.new(f"Camera_{image_basename}")
+                cam_obj = bpy.data.objects.new(f"Camera_{image_basename}", cam_data)
                 collection.objects.link(cam_obj)
                 
                 # Set camera parameters based on COLMAP camera model
@@ -650,9 +653,10 @@ class SKY_SPLAT_OT_load_colmap_model(bpy.types.Operator):
                 # Set the camera transformation
                 cam_obj.matrix_world = transform
                 
-                # Store COLMAP IDs as custom properties
+                # Store COLMAP IDs and original filename information
                 cam_obj['colmap_image_id'] = image_id
                 cam_obj['colmap_camera_id'] = image.camera_id
+                cam_obj['original_filename'] = image.name  # Store the full original filename
                 
                 # Store original quaternion and tvec for export
                 cam_obj['colmap_qvec'] = image.qvec.tolist()
@@ -793,13 +797,13 @@ class SKY_SPLAT_OT_export_colmap_model(bpy.types.Operator):
                     # Convert rotation matrix to quaternion using the COLMAP function
                     qvec = rotmat2qvec(R_colmap)
                     
-                    # Create a new Image object with updated transformation
+                    # Create a new Image object with updated transformation AND preserve filename
                     images[image_id] = Image(
                         id=image.id,
                         qvec=qvec,
                         tvec=np.array(t_colmap),
                         camera_id=image.camera_id,
-                        name=image.name,
+                        name=image.name,  # This preserves the original filename!
                         xys=image.xys,
                         point3D_ids=image.point3D_ids
                     )
