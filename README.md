@@ -152,7 +152,7 @@ The original SkySplat addon used the GraphDeco-INRIA's gaussian-splatting softwa
    Make note of where you cloned the code to and where the virtual environment directory is located, these will be needed in blender to call the gaussian-splatting software
 
 ### 3. Download the latest release
-   You can either download the latest version of the code, via the GitHub Download ZIP link under the code button at [skysplat_blender](https://github.com/kyjohnso/skysplat_blender) (shown below), or download a release zip file from [skysplat_blender.zip](https://github.com/kyjohnso/skysplat_blender/releases/download/v0.1.0/skysplat_blender.zip).
+   You can either download the latest version of the code, via the GitHub Download ZIP link under the code button at [skysplat_blender](https://github.com/kyjohnso/skysplat_blender) (shown below), or download a release zip file from [skysplat_blender.zip](https://github.com/kyjohnso/skysplat_blender/releases/download/v0.2.0/skysplat_blender.zip).
 
 <img src="images/download_zip.png" width="400" alt="Description">
 
