@@ -46,7 +46,60 @@ SkySplat is a Blender addon that simplifies the workflow for creating 3D Gaussia
 ### 1. Install COLMAP
    1. [COLMAP](https://colmap.github.io/) Structure From Motion library and application is available from a wide variety of OS repositories. You can also download it and build it from source per the instructions on their home page. For calling from skysplat_blender, the path to the colmap executable will need to be known.
 
-### 2. Install GraphDeco-INRIA's [gaussian-splatting](https://github.com/graphdeco-inria/gaussian-splatting) python package
+### 2. Install Brush (Rust based Gaussian Splatting)
+
+#### Prerequisites
+- [Rust](https://rustup.rs/) - Install the Rust programming language and Cargo package manager
+- Git
+
+#### Building Brush
+
+1. **Clone the Brush Repository**
+   ```bash
+   git clone https://github.com/ArthurBrussee/brush.git
+   cd brush
+   ```
+
+2. **Build for Your Platform**
+
+   **Linux:**
+   ```bash
+   # Install Rust if not already installed
+   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs/ | sh
+   source ~/.cargo/env
+   
+   # Build the application
+   cargo build --release
+   
+   # The executable will be at: target/release/brush_app
+   ```
+
+   **Windows:**
+   ```cmd
+   # Install Rust from https://rustup.rs/
+   # Then in Command Prompt or PowerShell:
+   
+   cargo build --release
+   
+   # The executable will be at: target\release\brush_app.exe
+   ```
+
+   **macOS:**
+   ```bash
+   # Install Rust if not already installed
+   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs/ | sh
+   source ~/.cargo/env
+   
+   # Build the application
+   cargo build --release
+   
+   # The executable will be at: target/release/brush_app
+   ```
+
+### 2 (a). Legacy - Install GraphDeco-INRIA's [gaussian-splatting](https://github.com/graphdeco-inria/gaussian-splatting) python package
+
+The original SkySplat addon used the GraphDeco-INRIA's gaussian-splatting software. These install instructions are provided for completeness.
+
    1. clone the repository
    ```
    git clone git@github.com:graphdeco-inria/gaussian-splatting.git --recursive
@@ -159,18 +212,28 @@ SkySplat is a Blender addon that simplifies the workflow for creating 3D Gaussia
    Now I can export the model scaled and rotated into a more natural coordinate system, and the 3DGS code will start with these parameters when it fits the gaussians.
 
     - Click "Export COLMAP Model" after you have finished transforming and adjusting your model, this will export a new model in the <colmap output directory>/transformed/ directory.
+
+    - Click "Prepare Brush Dataset" to prepare a dataset for training with the Gaussian Splatting Brush. This will arrange your COLMAP model and images into a directory that brush can import.
    
 
-6. **Gaussian Splatting**
-    - Configure Gaussian Splatting settings in the SkySplat Gaussian Splatting panel
-    - For now, you need to populate all of these fields (that will change in future releases)
-       - 3DGS repository is the location you cloned the gaussian-splatting repository to in step 3 above
-       - If you used a virtual-environment check use venv and put in the path to that venv (just the repository path/venv if you installed like I did above).
-       - You can click the chain link to link from the previous panels or select the directories manually
+6. **Brush Training (3D Gaussian Splatting)**
+   - Configure Brush settings in the SkySplat 3DGS panel (as shown in the image below)
+   - The Brush Executable path should auto-populate based on your platform's default location, but you can manually set it if needed
+   - Use the chain link icon next to the Source Path to automatically sync with your COLMAP output
+   - The Source Path should point to your transformed COLMAP model or prepared brush dataset
+   - Set your Export Path where the trained .ply files will be saved
+   - Configure training parameters:
+     - **Total Steps**: Number of training iterations (default: 30000)
+     - **Max Resolution**: Maximum image resolution for training (default: 1920)
+     - **With Viewer**: Enable this to pop up the interactive viewer application that shows real-time training progress
+   - Advanced options are available by expanding the "Show Advanced Options" section for fine-tuning learning rates, refinement parameters, and dataset options
+   - Click "Run Brush Training" to start the process
+   - Unlike the original Gaussian Splatting implementation, Brush runs as a subprocess so it won't block the Blender UI
+   - Monitor progress in the Blender console, or if you enabled "With Viewer", watch the training progress in the dedicated viewer window
+   - The training process will automatically export .ply files at specified intervals to your Export Path
 
-    - Click "Run Gaussian Splatting" and pray to the open source gods of our ancient ancestors. Again, if you have started Blender in a terminal, you can watch detailed logging and status in that terminal. Unlike COLMAP, the 3DGS is run in a subprocess so it doesn't block the Blender UI. 
 
-<img src="images/3dgs_panel.png" width="400" alt="Description">
+<img src="images/3dgs_brush_app_panel.png" width="400" alt="Description">
 
 7. **3DGS Loading**
    There is already a rich Blender addon ecosystem for loading 3D gaussian splats into Blender. I recommend [KIRI Innovation's 3DGS Render Addon](https://github.com/Kiri-Innovation/3dgs-render-blender-addon) and you can see it in my Blender screen shots above if you look closely. I recommend loading the ply file without transforming from COLMAP to Blender coordinates mainly because we already did a transformation and scaling in the previous step. If everything worked you will now have your transformed COLMAP model, any helper "reference silos" you created in blender, and the 3D Gaussian Splat ready to create whatever awesome render or animation you are working on. 
@@ -202,7 +265,7 @@ SkySplat_blender is licensed under the MIT License. A single file was forked fro
 
 ## Future Work
 
-I am currently in the progress of updating this Addon to use the rust based [brush](https://github.com/ArthurBrussee/brush) app. Since it is rust based I can distribute the binary with the addon, plus it has a much better license than the current implementation.
+1. I am working on packaging the brush app with the blender addon to further simplify the install process.
 
 ![pumproom_brush_5000](images/pumproom_brush_50000.png)
 
@@ -213,7 +276,8 @@ Without these open source (or source available in one case) projects, I would ha
 
 - [Blender](https://www.blender.org/)
 - [COLMAP](https://colmap.github.io/)
-- [Gaussian Splatting](https://github.com/graphdeco-inria/gaussian-splatting)
+- [Brush App](https://github.com/ArthurBrussee/brush) - Current preferred implementation for 3dgs
+- [Gaussian Splatting](https://github.com/graphdeco-inria/gaussian-splatting) - Original source for performing Gaussian Splatting
 - [RedShot AI Tutorial](https://www.reshot.ai/3d-gaussian-splatting)
 - [KIRI Innovation's 3DGS Render Addon](https://github.com/Kiri-Innovation/3dgs-render-blender-addon)
 
