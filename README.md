@@ -209,7 +209,6 @@ The original SkySplat addon used the GraphDeco-INRIA's gaussian-splatting softwa
    ![rotate and scale colmap 3](images/rotate_and_scale_colmap_3.png)
    ![rotate and scale colmap 4](images/rotate_and_scale_colmap_4.png)
    ![rotate and scale colmap 5](images/rotate_and_scale_colmap_5.png)
-   ![rotate and scale colmap 6](images/rotate_and_scale_colmap_6.png)
 
    Now I can export the model scaled and rotated into a more natural coordinate system, and the 3DGS code will start with these parameters when it fits the gaussians.
 
