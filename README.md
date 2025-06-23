@@ -260,7 +260,11 @@ If you have any ideas for further features, or bug reports, or want to help work
 
 ## License
 
-SkySplat_blender is licensed under the MIT License. A single file was forked from [COLMAP](https://colmap.github.io/) (utils/read_write_model.py) and it retains the original copyright. None of the code from [Gaussian Splatting](https://github.com/graphdeco-inria/gaussian-splatting) is included in this repo, however, we loosly integrate with it and all of its copyright and license conditions should be adhered to.
+SkySplat_blender is licensed under the MIT License. A single file was forked from [COLMAP](https://colmap.github.io/) (utils/read_write_model.py) and it retains the original copyright. 
+
+Brush is built separately and no code is included in SkySplat. Also, it is licensed under Apache v2, and this license should be adhered to.
+
+None of the code from [Gaussian Splatting](https://github.com/graphdeco-inria/gaussian-splatting) is included in this repo, however, if you use it all of its copyright and license conditions should be adhered to.
 
 
 ## Future Work
