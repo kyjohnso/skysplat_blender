@@ -28,7 +28,7 @@ SkySplat is a Blender addon that simplifies the workflow for creating 3D Gaussia
   ![colmap_and_blender](images/silo_colmap_and_blender.png)
 
 - **Gaussian Splatting Integration**
-  - A loose integration of GraphDeco-INRIA's [gaussian-splatting](https://github.com/graphdeco-inria/gaussian-splatting) repository.
+  - A loose integration of the [Brush App](https://github.com/ArthurBrussee/brush) for gaussian splatting training.
   - Configuration of gaussian-splatting training from Blender
   - Running of gaussian-splatting in a subprocess
 
