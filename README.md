@@ -175,7 +175,7 @@ The original SkySplat addon used the GraphDeco-INRIA's gaussian-splatting softwa
 <img src="images/video_loader_panel.png" width="400" alt="Description">
 
 3. **Extracting Frames**
-   - Set your desired frame range and step value
+   - Set your desired frame range and step value, we suggest a step size between 5 and 10 for the sample silo video. Smaller step size means more frames and better reconstruction, but also longer processing times.
    - Confirm or modify the output folder
    - Click "Extract Frames" to process
 
@@ -193,6 +193,8 @@ The original SkySplat addon used the GraphDeco-INRIA's gaussian-splatting softwa
    - Click "Load COLMAP Model" after running COLMAP (future versions will make explicit the location of the model to load from, however for now it is the same location as the output of COLMAP that you selected above). Note that the defaults of Transform on Import and Transform on Export are not selected by default, because we are transforming the COLMAP model in blender, we don't necessarily need the addon to do any transformations for us. This will however leave the imported cameras facing the wrong direction but this does not affect the subsequent 3DGS training. 
 
    ![loaded COLMAP model](images/rotate_and_scale_colmap_1.png)
+
+   - If the loaded COLMAP model looks sparse with few points or few cameras, try running frame extraction again with a smaller step size.
 
    - To transform this model, make sure you transform the parent "COLMAP_Root" empty object, not individual cameras or points. 
 
