@@ -32,7 +32,8 @@ SkySplat is a Blender addon that simplifies the workflow for creating 3D Gaussia
   - Configuration of gaussian-splatting training from Blender
   - Running of gaussian-splatting in a subprocess
 
-  ![gaussian_splatting](images/silo_colmap_and_3dgs_6.png)
+  <!-- ![gaussian_splatting](images/silo_colmap_and_3dgs_6.png) -->
+  ![puente_nuevo](images/puente_nuevo_bridge.png)
 
 ## Requirements
 
@@ -94,61 +95,6 @@ SkySplat is a Blender addon that simplifies the workflow for creating 3D Gaussia
    
    # The executable will be at: target/release/brush_app
    ```
-
-### 2 (a). Legacy - Install GraphDeco-INRIA's [gaussian-splatting](https://github.com/graphdeco-inria/gaussian-splatting) python package
-
-The original SkySplat addon used the GraphDeco-INRIA's gaussian-splatting software. These install instructions are provided for completeness.
-
-   1. clone the repository
-   ```
-   git clone git@github.com:graphdeco-inria/gaussian-splatting.git --recursive
-   cd gaussian-splatting
-   ```
-   2. Virtual Environment - I highly recommend installing the gaussian-splatting software in a virtual environment to avoid conflicts with other python packages you may have installed. Here is how you would create and activate a virtual environment in bash:
-   ```
-   python3 -m venv venv
-   source venv/bin/activate
-   ```
-### 3. Install the python dependencies
-   ```
-   pip install plyfile tqdm
-   ````
-   The submodules in the gaussian splatting repository depend on torch. You can install torch a variety of ways, but I find it most continent to install it via pip, just like the other dependencies. We will give pip a index url that is for your specific CUDA version (in this example I am installing 12.6). You can find your specific CUDA version by running;
-   ```
-   nvcc --version
-   ```
-   Then install torch via pip;
-   ```
-   pip install torch --index-url https://download.pytorch.org/whl/cu126
-   ```
-
-   At this point, I find it useful to verify that the installed torch version is compatible with your CUDA version and GPU. You can run the following commands in a python interpreter or put them in a file and run it.
-
-   ```
-   #!/usr/bin/env python3.11
-   verify_cuda_torch.py
-
-   import torch
-
-   if torch.cuda.is_available():
-      print("CUDA is available! You have", torch.cuda.device_count(), "GPU(s).")
-      print("Device name:", torch.cuda.get_device_name(0))
-   else:
-      print("CUDA is not available. Check your installation.")
-   ```
-   
-   Note: I have occasionally had problems with creating a venv, activating it, and then the python command pointing to a different version of python. Depending on your version of python and how you setup your environment, you may need to adjust how you call this file that you just created. For instance, I called the above file with the command:
-   ```
-   python3.11 verify_cuda_torch.py
-   ```
-   If you encounter issues, try creating a new venv and reinstalling torch there.
-
-   Now you should be able to install the gaussian-splatting dependencies:
-   ```
-   pip install submodules/diff-gaussian-rasterization
-   pip install submodules/simple-knn
-   ```
-   Make note of where you cloned the code to and where the virtual environment directory is located, these will be needed in blender to call the gaussian-splatting software
 
 ### 3. Download the latest release
    You can either download the latest version of the code, via the GitHub Download ZIP link under the code button at [skysplat_blender](https://github.com/kyjohnso/skysplat_blender) (shown below), or download a release zip file from [skysplat_blender.zip](https://github.com/kyjohnso/skysplat_blender/releases/download/v0.2.0/skysplat_blender.zip).
@@ -282,7 +228,7 @@ Without these open source (or source available in one case) projects, I would ha
 - [COLMAP](https://colmap.github.io/)
 - [Brush App](https://github.com/ArthurBrussee/brush) - Current preferred implementation for 3dgs
 - [Gaussian Splatting](https://github.com/graphdeco-inria/gaussian-splatting) - Original source for performing Gaussian Splatting
-- [RedShot AI Tutorial](https://www.reshot.ai/3d-gaussian-splatting)
+- [RedShot AI Tutorial](https://www.reshot.ai/3d-gaussian-splatting) - I used this tutorial extensively as I was working my way through my first gaussian splats
 - [KIRI Innovation's 3DGS Render Addon](https://github.com/Kiri-Innovation/3dgs-render-blender-addon)
 
 Happy Splatting!🎨
@@ -290,3 +236,58 @@ Happy Splatting!🎨
 Kyjohnso
 
 ![lighthouse_rendered1.png](images/lighthouse_rendered1.png)
+
+### Legacy - Install GraphDeco-INRIA's [gaussian-splatting](https://github.com/graphdeco-inria/gaussian-splatting) python package
+
+The original SkySplat addon used the GraphDeco-INRIA's gaussian-splatting software. These install instructions are provided for completeness.
+
+   1. clone the repository
+   ```
+   git clone git@github.com:graphdeco-inria/gaussian-splatting.git --recursive
+   cd gaussian-splatting
+   ```
+   2. Virtual Environment - I highly recommend installing the gaussian-splatting software in a virtual environment to avoid conflicts with other python packages you may have installed. Here is how you would create and activate a virtual environment in bash:
+   ```
+   python3 -m venv venv
+   source venv/bin/activate
+   ```
+### 3. Install the python dependencies
+   ```
+   pip install plyfile tqdm
+   ````
+   The submodules in the gaussian splatting repository depend on torch. You can install torch a variety of ways, but I find it most continent to install it via pip, just like the other dependencies. We will give pip a index url that is for your specific CUDA version (in this example I am installing 12.6). You can find your specific CUDA version by running;
+   ```
+   nvcc --version
+   ```
+   Then install torch via pip;
+   ```
+   pip install torch --index-url https://download.pytorch.org/whl/cu126
+   ```
+
+   At this point, I find it useful to verify that the installed torch version is compatible with your CUDA version and GPU. You can run the following commands in a python interpreter or put them in a file and run it.
+
+   ```
+   #!/usr/bin/env python3.11
+   verify_cuda_torch.py
+
+   import torch
+
+   if torch.cuda.is_available():
+      print("CUDA is available! You have", torch.cuda.device_count(), "GPU(s).")
+      print("Device name:", torch.cuda.get_device_name(0))
+   else:
+      print("CUDA is not available. Check your installation.")
+   ```
+   
+   Note: I have occasionally had problems with creating a venv, activating it, and then the python command pointing to a different version of python. Depending on your version of python and how you setup your environment, you may need to adjust how you call this file that you just created. For instance, I called the above file with the command:
+   ```
+   python3.11 verify_cuda_torch.py
+   ```
+   If you encounter issues, try creating a new venv and reinstalling torch there.
+
+   Now you should be able to install the gaussian-splatting dependencies:
+   ```
+   pip install submodules/diff-gaussian-rasterization
+   pip install submodules/simple-knn
+   ```
+   Make note of where you cloned the code to and where the virtual environment directory is located, these will be needed in blender to call the gaussian-splatting software
