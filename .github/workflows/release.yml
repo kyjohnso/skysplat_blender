@@ -1,0 +1,45 @@
+name: Create Release Archive
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  create-archive:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Create archive with correct directory structure
+      run: |
+        # Create a temporary directory
+        mkdir -p temp_archive
+        
+        # Copy all files to a subdirectory named skysplat_blender
+        cp -r . temp_archive/skysplat_blender/
+        
+        # Remove the .git directory and GitHub workflows from the archive copy
+        rm -rf temp_archive/skysplat_blender/.git
+        rm -rf temp_archive/skysplat_blender/.github
+        
+        # Create the zip file
+        cd temp_archive
+        zip -r ../skysplat_blender.zip skysplat_blender/
+        cd ..
+        
+        # Clean up temporary directory
+        rm -rf temp_archive
+    
+    - name: Upload archive to release
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ github.event.release.upload_url }}
+        asset_path: ./skysplat_blender.zip
+        asset_name: skysplat_blender.zip
+        asset_content_type: application/zip
