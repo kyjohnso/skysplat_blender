@@ -1,0 +1,55 @@
+name: Test Release Archive Creation
+
+on:
+  workflow_dispatch:  # Allows manual triggering from GitHub Actions tab
+  push:
+    branches: [ main, master ]
+    paths: [ '.github/workflows/test-release.yml' ]  # Only run when this file changes
+
+jobs:
+  test-archive:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Create archive with correct directory structure
+      run: |
+        # Create a temporary directory
+        mkdir -p temp_archive
+        
+        # Copy all files to a subdirectory named skysplat_blender
+        cp -r . temp_archive/skysplat_blender/
+        
+        # Remove the .git directory and GitHub workflows from the archive copy
+        rm -rf temp_archive/skysplat_blender/.git
+        rm -rf temp_archive/skysplat_blender/.github
+        
+        # Create the zip file
+        cd temp_archive
+        zip -r ../skysplat_blender.zip skysplat_blender/
+        cd ..
+        
+        # Verify the zip structure
+        echo "Checking zip file contents:"
+        unzip -l skysplat_blender.zip | head -20
+        
+        # Check that the top-level directory is named correctly
+        echo "Verifying top-level directory structure:"
+        unzip -l skysplat_blender.zip | grep "skysplat_blender/" | head -5
+        
+        # Get zip file size
+        ls -lh skysplat_blender.zip
+        
+        # Clean up temporary directory
+        rm -rf temp_archive
+    
+    - name: Upload test archive as artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: skysplat_blender-test-archive
+        path: skysplat_blender_test.zip
+        retention-days: 7
