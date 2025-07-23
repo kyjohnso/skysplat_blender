@@ -26,20 +26,20 @@ jobs:
         
         # Create the zip file
         cd ../temp_archive
-        zip -r skysplat_blender.zip skysplat_blender/
-        mv skysplat_blender.zip $GITHUB_WORKSPACE/
+        zip -r skysplat_blender-test.zip skysplat_blender/
+        mv skysplat_blender-test.zip $GITHUB_WORKSPACE/
         cd $GITHUB_WORKSPACE
         
         # Verify the zip structure
         echo "Checking zip file contents:"
-        unzip -l skysplat_blender.zip | head -20
+        unzip -l skysplat_blender-test.zip | head -20
         
         # Check that the top-level directory is named correctly
         echo "Verifying top-level directory structure:"
-        unzip -l skysplat_blender.zip | grep "skysplat_blender/" | head -5
+        unzip -l skysplat_blender-test.zip | grep "skysplat_blender/" | head -5
         
         # Get zip file size
-        ls -lh skysplat_blender.zip
+        ls -lh skysplat_blender-test.zip
         
         # Clean up temporary directory
         rm -rf ../temp_archive
@@ -48,5 +48,5 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: skysplat_blender-test-archive
-        path: skysplat_blender_test.zip
+        path: skysplat_blender-test.zip
         retention-days: 7
