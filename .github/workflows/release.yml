@@ -16,23 +16,20 @@ jobs:
     
     - name: Create archive with correct directory structure
       run: |
-        # Create a temporary directory
-        mkdir -p temp_archive
+        # Create a temporary directory outside current directory
+        mkdir -p ../temp_archive/skysplat_blender
         
-        # Copy all files to a subdirectory named skysplat_blender
-        cp -r . temp_archive/skysplat_blender/
-        
-        # Remove the .git directory and GitHub workflows from the archive copy
-        rm -rf temp_archive/skysplat_blender/.git
-        rm -rf temp_archive/skysplat_blender/.github
+        # Copy all files except .git and temp directories
+        find . -maxdepth 1 -not -name '.' -not -name '.git' -not -name '../temp_archive' -exec cp -r {} ../temp_archive/skysplat_blender/ \;
         
         # Create the zip file
-        cd temp_archive
-        zip -r ../skysplat_blender.zip skysplat_blender/
-        cd ..
+        cd ../temp_archive
+        zip -r skysplat_blender.zip skysplat_blender/
+        mv skysplat_blender.zip $GITHUB_WORKSPACE/
+        cd $GITHUB_WORKSPACE
         
         # Clean up temporary directory
-        rm -rf temp_archive
+        rm -rf ../temp_archive
     
     - name: Upload archive to release
       uses: actions/upload-release-asset@v1
