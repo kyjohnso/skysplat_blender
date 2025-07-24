@@ -16,7 +16,7 @@ jobs:
       with:
         fetch-depth: 0
     
-    - name: Create directory structure for archive
+    - name: Create archive with correct directory structure
       run: |
         # Create the target directory structure in workspace
         mkdir -p skysplat_blender
@@ -35,15 +35,18 @@ jobs:
           fi
         done
         
-        # Verify the directory contents
-        echo "Checking directory structure:"
-        ls -la skysplat_blender/
-        echo "Directory size:"
-        du -sh skysplat_blender/
+        # Create the zip file containing the skysplat_blender directory
+        zip -r skysplat_blender.zip skysplat_blender/
+        
+        # Verify the zip structure
+        echo "Checking zip file contents:"
+        unzip -l skysplat_blender.zip | head -20
+        echo "Zip file size:"
+        ls -lh skysplat_blender.zip
     
     - name: Upload test archive as artifact
       uses: actions/upload-artifact@v4
       with:
-        name: skysplat_blender
-        path: skysplat_blender/
+        name: skysplat_blender.zip
+        path: skysplat_blender.zip
         retention-days: 7
