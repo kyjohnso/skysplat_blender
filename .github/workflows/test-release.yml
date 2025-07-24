@@ -21,9 +21,9 @@ jobs:
         # Create the target directory structure in workspace
         mkdir -p skysplat_blender
         
-        # Copy all files except .git directory
+        # Copy all files except .git and images directory
         for item in *; do
-          if [[ "$item" != ".git" && "$item" != "skysplat_blender" ]]; then
+          if [[ "$item" != ".git" && "$item" != "images" && "$item" != "skysplat_blender" ]]; then
             cp -r "$item" skysplat_blender/
           fi
         done
