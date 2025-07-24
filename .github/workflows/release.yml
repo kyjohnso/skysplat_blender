@@ -19,14 +19,24 @@ jobs:
         # Create a temporary directory outside current directory
         mkdir -p ../temp_archive/skysplat_blender
         
-        # Copy all files except .git and temp directories
-        find . -maxdepth 1 -not -name '.' -not -name '.git' -not -name '../temp_archive' -exec cp -r {} ../temp_archive/skysplat_blender/ \;
+        # Copy all files except .git, images directory, and temp directories
+        find . -maxdepth 1 -not -name '.' -not -name '.git' -not -name 'images' -not -name '../temp_archive' -exec cp -r {} ../temp_archive/skysplat_blender/ \;
         
-        # Create the zip file
-        cd ../temp_archive
-        zip -r skysplat_blender.zip skysplat_blender/
-        mv skysplat_blender.zip $GITHUB_WORKSPACE/
+        # Move the directory structure to workspace for processing
+        mv skysplat_blender $GITHUB_WORKSPACE/
         cd $GITHUB_WORKSPACE
+        
+        # Verify the directory structure
+        echo "Checking directory structure:"
+        find skysplat_blender -type f | head -20
+        
+        # Check directory size
+        du -sh skysplat_blender/
+        
+        # Create the zip file for release
+        zip -r skysplat_blender.zip skysplat_blender/
+        echo "Zip file size:"
+        ls -lh skysplat_blender.zip
         
         # Clean up temporary directory
         rm -rf ../temp_archive
