@@ -22,9 +22,14 @@ jobs:
         mkdir -p ../temp_archive/skysplat_blender
         
         # Copy all files except .git, images directory, and temp directories
-        find . -maxdepth 1 -not -name '.' -not -name '.git' -not -name 'images' -not -name '../temp_archive' -exec cp -r {} ../temp_archive/skysplat_blender/ \;
+        find . -maxdepth 1 -not -name '.' -not -name '.git' -not -name 'images' -exec cp -r {} ../temp_archive/skysplat_blender/ \;
+        
+        # Debug: Check what was created
+        echo "Contents of temp_archive:"
+        ls -la ../temp_archive/
         
         # Move the directory structure to workspace for artifact upload
+        cd ../temp_archive
         mv skysplat_blender $GITHUB_WORKSPACE/
         cd $GITHUB_WORKSPACE
         
