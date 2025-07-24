@@ -20,21 +20,23 @@ jobs:
         mkdir -p ../temp_archive/skysplat_blender
         
         # Copy all files except .git, images directory, and temp directories
-        find . -maxdepth 1 -not -name '.' -not -name '.git' -not -name 'images' -not -name '../temp_archive' -exec cp -r {} ../temp_archive/skysplat_blender/ \;
+        find . -maxdepth 1 -not -name '.' -not -name '.git' -not -name 'images' -exec cp -r {} ../temp_archive/skysplat_blender/ \;
         
-        # Move the directory structure to workspace for processing
-        mv skysplat_blender $GITHUB_WORKSPACE/
+        # Debug: Check what was created
+        echo "Contents of temp_archive:"
+        ls -la ../temp_archive/
+        echo "Contents of skysplat_blender directory:"
+        ls -la ../temp_archive/skysplat_blender/
+        
+        # Create the zip file directly from temp_archive
+        cd ../temp_archive
+        zip -r skysplat_blender.zip skysplat_blender/
+        mv skysplat_blender.zip $GITHUB_WORKSPACE/
         cd $GITHUB_WORKSPACE
         
-        # Verify the directory structure
-        echo "Checking directory structure:"
-        find skysplat_blender -type f | head -20
-        
-        # Check directory size
-        du -sh skysplat_blender/
-        
-        # Create the zip file for release
-        zip -r skysplat_blender.zip skysplat_blender/
+        # Verify the zip structure
+        echo "Checking zip file contents:"
+        unzip -l skysplat_blender.zip | head -20
         echo "Zip file size:"
         ls -lh skysplat_blender.zip
         
