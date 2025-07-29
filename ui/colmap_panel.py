@@ -77,6 +77,77 @@ def get_default_colmap_path():
     
     return ""
 
+def get_colmap_version_and_options(colmap_path):
+    """Get COLMAP version and determine appropriate option syntax"""
+    try:
+        # Try to get version info from help command
+        result = subprocess.run(
+            f'"{colmap_path}" help' if colmap_path else "colmap help",
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        
+        if result.returncode == 0 and result.stdout:
+            # Parse version from output like "COLMAP 3.13.0.dev0"
+            import re
+            version_match = re.search(r'COLMAP\s+(\d+)\.(\d+)\.(\d+)', result.stdout)
+            if version_match:
+                major, minor, patch = map(int, version_match.groups())
+                
+                # Determine option syntax based on version
+                # COLMAP 3.13+ uses FeatureExtraction.use_gpu
+                # COLMAP 3.12 and earlier use SiftExtraction.use_gpu
+                if major > 3 or (major == 3 and minor >= 13):
+                    return {
+                        'feature_gpu_option': 'FeatureExtraction.use_gpu',
+                        'matching_gpu_option': 'SiftMatching.use_gpu',
+                        'version': f"{major}.{minor}.{patch}"
+                    }
+                else:
+                    return {
+                        'feature_gpu_option': 'SiftExtraction.use_gpu',
+                        'matching_gpu_option': 'SiftMatching.use_gpu',
+                        'version': f"{major}.{minor}.{patch}"
+                    }
+    except Exception as e:
+        logger.warning(f"Could not determine COLMAP version: {e}")
+    
+    # Fallback: Try to detect by testing feature_extractor help
+    try:
+        result = subprocess.run(
+            f'"{colmap_path}" feature_extractor --help' if colmap_path else "colmap feature_extractor --help",
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        
+        if result.returncode == 0 and result.stdout:
+            if '--FeatureExtraction.use_gpu' in result.stdout:
+                return {
+                    'feature_gpu_option': 'FeatureExtraction.use_gpu',
+                    'matching_gpu_option': 'SiftMatching.use_gpu',
+                    'version': 'unknown (3.13+)'
+                }
+            elif '--SiftExtraction.use_gpu' in result.stdout:
+                return {
+                    'feature_gpu_option': 'SiftExtraction.use_gpu',
+                    'matching_gpu_option': 'SiftMatching.use_gpu',
+                    'version': 'unknown (3.12-)'
+                }
+    except Exception as e:
+        logger.warning(f"Could not test COLMAP options: {e}")
+    
+    # Final fallback - assume newer version (safer default)
+    logger.warning("Using default COLMAP options for version 3.13+")
+    return {
+        'feature_gpu_option': 'FeatureExtraction.use_gpu',
+        'matching_gpu_option': 'SiftMatching.use_gpu',
+        'version': 'unknown (default)'
+    }
+
 def get_default_magick_path():
     """Get default ImageMagick path based on operating system"""
     system = platform.system()
