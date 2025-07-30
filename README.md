@@ -2,7 +2,7 @@
 
 # SkySplat: 3DGS Blender Toolkit
 
-SkySplat is a Blender addon that simplifies the workflow for creating 3D Gaussian Splats from drone footage. It provides a comprehensive set of tools to streamline the process from video import to frame extraction, and loose integration of Blender with COLMAP Arthur Brussee's rust based [Brush App](https://github.com/ArthurBrussee/brush).
+SkySplat is a Blender addon that simplifies the workflow for creating 3D Gaussian Splats from drone footage. It provides a comprehensive set of tools to streamline the process from video import to frame extraction, and loose integration of Blender with COLMAP and Arthur Brussee's rust based [Brush App](https://github.com/ArthurBrussee/brush) (pre-compiled binaries included).
 ![pumproom_7000_5](images/pumproom_7000_5.png)
 
 ## Features
@@ -39,71 +39,28 @@ SkySplat is a Blender addon that simplifies the workflow for creating 3D Gaussia
 
 - Blender 4.0.0 or newer
 - COLMAP (for reconstruction features)
-- [Gaussian Splatting](https://github.com/graphdeco-inria/gaussian-splatting)
+
+**Note**: The [Brush App](https://github.com/ArthurBrussee/brush) for Gaussian Splatting is now bundled with the addon - no separate installation required!
 
 ## Installation
 
 ### 1. Install COLMAP
    1. [COLMAP](https://colmap.github.io/) Structure From Motion library and application is available from a wide variety of OS repositories. You can also download it and build it from source per the instructions on their home page. For calling from skysplat_blender, the path to the colmap executable will need to be known.
 
-### 2. Install Brush (Rust based Gaussian Splatting)
-
-#### Prerequisites
-- [Rust](https://rustup.rs/) - Install the Rust programming language and Cargo package manager
-- Git
-
-#### Building Brush
-
-1. **Clone the Brush Repository**
-   ```bash
-   git clone https://github.com/ArthurBrussee/brush.git
-   cd brush
-   ```
-
-2. **Build for Your Platform**
-
-   **Linux:**
-   ```bash
-   # Install Rust if not already installed
-   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs/ | sh
-   source ~/.cargo/env
+### 2. Download and Install SkySplat
+1. Download the latest release zip file from [SkySplat Releases](https://github.com/kyjohnso/skysplat_blender/releases/latest)
    
-   # Build the application
-   cargo build --release
+   **OR**
    
-   # The executable will be at: target/release/brush_app
-   ```
+   Download the latest development version via the GitHub Download ZIP link under the code button at [skysplat_blender](https://github.com/kyjohnso/skysplat_blender)
 
-   **Windows:**
-   ```cmd
-   # Install Rust from https://rustup.rs/
-   # Then in Command Prompt or PowerShell:
-   
-   cargo build --release
-   
-   # The executable will be at: target\release\brush_app.exe
-   ```
+   <img src="images/download_zip.png" width="400" alt="Description">
 
-   **macOS:**
-   ```bash
-   # Install Rust if not already installed
-   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs/ | sh
-   source ~/.cargo/env
-   
-   # Build the application
-   cargo build --release
-   
-   # The executable will be at: target/release/brush_app
-   ```
+2. Open Blender and navigate to Edit → Preferences → Add-ons
+3. Click "Install..." and select the downloaded ZIP file
+4. Enable the addon by checking the box next to "3D View: SkySplat: 3DGS Blender Toolkit"
 
-### 3. Download the latest release
-   You can either download the latest version of the code, via the GitHub Download ZIP link under the code button at [skysplat_blender](https://github.com/kyjohnso/skysplat_blender) (shown below), or download a release zip file from [skysplat_blender.zip](https://github.com/kyjohnso/skysplat_blender/releases/download/v0.2.0/skysplat_blender.zip).
-
-<img src="images/download_zip.png" width="400" alt="Description">
-
-3. Open Blender and navigate to Edit → Preferences → Add-ons
-4. Click "Install..." and select the downloaded ZIP file
-5. Enable the addon by checking the box next to "3D View: SkySplat: 3DGS Blender Toolkit"
+**That's it!** The Brush app binaries for Windows, macOS, and Linux are included in the addon, so no additional compilation is required.
 ---
 ## Example Workflow Run Through
 
@@ -164,7 +121,7 @@ SkySplat is a Blender addon that simplifies the workflow for creating 3D Gaussia
 
 6. **Brush Training (3D Gaussian Splatting)**
    - Configure Brush settings in the SkySplat 3DGS panel (as shown in the image below)
-   - The Brush Executable path should auto-populate based on your platform's default location, but you can manually set it if needed
+   - The Brush Executable path will auto-populate with the bundled binary for your platform (Windows, macOS, or Linux)
    - Use the chain link icon next to the Source Path to automatically sync with your COLMAP output
    - The Source Path should point to your transformed COLMAP model or prepared brush dataset
    - Set your Export Path where the trained .ply files will be saved
@@ -215,7 +172,10 @@ None of the code from [Gaussian Splatting](https://github.com/graphdeco-inria/ga
 
 ## Future Work
 
-1. I am working on packaging the brush app with the blender addon to further simplify the install process.
+1. ✅ ~~Package the brush app with the blender addon~~ **COMPLETED!** - Brush binaries are now bundled for all platforms
+2. Integration of SRT metadata for improved COLMAP initialization
+3. Enhanced UI for batch processing multiple videos
+4. Direct integration with more 3D Gaussian Splatting viewers
 
 ![pumproom_brush_5000](images/pumproom_brush_50000.png)
 

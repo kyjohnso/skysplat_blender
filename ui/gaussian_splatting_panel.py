@@ -5,6 +5,7 @@ import threading
 import platform
 from bpy.types import PropertyGroup, Panel, Operator
 from bpy.props import StringProperty, IntProperty, FloatProperty, BoolProperty, PointerProperty
+from ..config import BUNDLED_BINARY_NAMES, get_bundled_binaries_directory
 
 # Version for UI display
 PANEL_VERSION = "0.2.0-brush"
@@ -35,14 +36,34 @@ def update_export_path_from_source(self, context):
 def get_default_brush_path():
     """Get default brush executable path based on operating system"""
     system = platform.system()
+    
+    # First priority: Check for bundled binaries
+    if system in BUNDLED_BINARY_NAMES:
+        bundled_binary_name = BUNDLED_BINARY_NAMES[system]
+        bundled_path = os.path.join(get_bundled_binaries_directory(), bundled_binary_name)
+        if os.path.exists(bundled_path):
+            return bundled_path
+    
+    # Fallback: Check for user-compiled binaries in default locations
     home = os.path.expanduser("~")
     
     if system == "Windows":
-        return os.path.join(home, "projects", "brush", "target", "release", "brush_app.exe")
+        user_path = os.path.join(home, "projects", "brush", "target", "release", "brush_app.exe")
     elif system == "Darwin":  # macOS
-        return os.path.join(home, "projects", "brush", "target", "release", "brush_app")
+        user_path = os.path.join(home, "projects", "brush", "target", "release", "brush_app")
     elif system == "Linux":
-        return os.path.join(home, "projects", "brush", "target", "release", "brush_app")
+        user_path = os.path.join(home, "projects", "brush", "target", "release", "brush_app")
+    else:
+        return ""
+    
+    if os.path.exists(user_path):
+        return user_path
+    
+    # If neither bundled nor user-compiled binary exists, return the bundled path as default
+    # This will allow users to see where the bundled binary should be located
+    if system in BUNDLED_BINARY_NAMES:
+        bundled_binary_name = BUNDLED_BINARY_NAMES[system]
+        return os.path.join(get_bundled_binaries_directory(), bundled_binary_name)
     
     return ""
 
