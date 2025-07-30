@@ -323,54 +323,177 @@ def run_command(command, cwd=None):
             universal_newlines=True,
             cwd=cwd
         )
-        logger.info(f"Command output: {result.stdout}")
+        
+        # Log both stdout and stderr - COLMAP often writes important info to stderr
+        if result.stdout.strip():
+            logger.info(f"Command stdout: {result.stdout.strip()}")
+        else:
+            logger.info("Command stdout: (empty)")
+            
+        if result.stderr.strip():
+            logger.info(f"Command stderr: {result.stderr.strip()}")
+        else:
+            logger.info("Command stderr: (empty)")
+            
         return 0  # Success
     except subprocess.CalledProcessError as e:
-        logger.error(f"Command failed with error: {e}")
-        logger.error(f"Error output: {e.stderr}")
+        logger.error(f"Command failed with return code {e.returncode}: {e}")
+        if e.stdout and e.stdout.strip():
+            logger.error(f"Failed command stdout: {e.stdout.strip()}")
+        if e.stderr and e.stderr.strip():
+            logger.error(f"Failed command stderr: {e.stderr.strip()}")
         return e.returncode
 
+
+def inspect_colmap_database(database_path):
+    """Inspect COLMAP database to diagnose feature extraction and matching issues"""
+    if not os.path.exists(database_path):
+        logger.error(f"Database not found: {database_path}")
+        return
+    
+    try:
+        conn = sqlite3.connect(database_path)
+        cursor = conn.cursor()
+        
+        # Check images table
+        cursor.execute("SELECT COUNT(*) FROM images")
+        image_count = cursor.fetchone()[0]
+        logger.info(f"Database contains {image_count} images")
+        
+        # Check keypoints table
+        cursor.execute("SELECT COUNT(*) FROM keypoints")
+        keypoint_count = cursor.fetchone()[0]
+        logger.info(f"Database contains {keypoint_count} keypoint entries")
+        
+        # Check matches table
+        cursor.execute("SELECT COUNT(*) FROM matches")
+        match_count = cursor.fetchone()[0]
+        logger.info(f"Database contains {match_count} image pair matches")
+        
+        # Get detailed keypoint info per image
+        cursor.execute("""
+            SELECT images.name, keypoints.rows, keypoints.cols
+            FROM images
+            LEFT JOIN keypoints ON images.image_id = keypoints.image_id
+        """)
+        keypoint_details = cursor.fetchall()
+        
+        for name, rows, cols in keypoint_details:
+            if rows is not None and cols is not None:
+                feature_count = rows
+                logger.info(f"Image '{name}': {feature_count} features detected")
+            else:
+                logger.warning(f"Image '{name}': No features detected!")
+        
+        # Check for successful matches
+        if match_count > 0:
+            cursor.execute("SELECT COUNT(*) FROM matches WHERE rows > 0")
+            successful_matches = cursor.fetchone()[0]
+            logger.info(f"Successful matches: {successful_matches}/{match_count}")
+        
+        conn.close()
+        
+    except Exception as e:
+        logger.error(f"Failed to inspect database: {e}")
+
+def validate_input_images(input_path):
+    """Validate input images and report potential issues"""
+    if not os.path.exists(input_path):
+        logger.error(f"Input path does not exist: {input_path}")
+        return False
+    
+    image_files = [f for f in os.listdir(input_path)
+                   if f.lower().endswith(('.jpg', '.png', '.jpeg'))]
+    
+    logger.info(f"Found {len(image_files)} images in input directory")
+    
+    if len(image_files) < 3:
+        logger.warning(f"Very few images ({len(image_files)}) - need at least 3 for reconstruction")
+        return False
+    
+    # Check image sizes and report any inconsistencies
+    try:
+        from PIL import Image
+        sizes = []
+        for img_file in image_files[:10]:  # Check first 10 images
+            img_path = os.path.join(input_path, img_file)
+            with Image.open(img_path) as img:
+                sizes.append(img.size)
+        
+        unique_sizes = list(set(sizes))
+        if len(unique_sizes) > 1:
+            logger.warning(f"Mixed image sizes detected: {unique_sizes}")
+        else:
+            logger.info(f"All images have consistent size: {unique_sizes[0]}")
+            
+    except ImportError:
+        logger.info("PIL not available - skipping image size validation")
+    except Exception as e:
+        logger.warning(f"Could not validate image sizes: {e}")
+    
+    return True
 
 def run_colmap_processing(props):
     """Run COLMAP processing with the given properties"""
     # Get paths
     source_path = props.output_folder
     input_path = os.path.join(source_path, "input")
+    database_path = os.path.join(source_path, "distorted", "database.db")
+    
+    # Validate input images first
+    logger.info("=== COLMAP Processing Started ===")
+    if not validate_input_images(input_path):
+        raise RuntimeError("Input image validation failed")
     
     # Configure COLMAP command
     colmap_command = f'"{props.colmap_path}"' if props.colmap_path else "colmap"
     use_gpu = 1 if props.use_gpu else 0
     
+    # Get COLMAP version and appropriate options
+    colmap_options = get_colmap_version_and_options(props.colmap_path)
+    logger.info(f"Using COLMAP version: {colmap_options['version']}")
+    
     # Create directories
     os.makedirs(os.path.join(source_path, "distorted/sparse"), exist_ok=True)
     
     # Feature extraction
+    logger.info("=== Step 1: Feature Extraction ===")
     feature_cmd = f'{colmap_command} feature_extractor ' \
-                 f'--database_path "{source_path}/distorted/database.db" ' \
+                 f'--database_path "{database_path}" ' \
                  f'--image_path "{input_path}" ' \
                  f'--ImageReader.single_camera 1 ' \
                  f'--ImageReader.camera_model {props.camera_model} ' \
-                 f'--SiftExtraction.use_gpu {use_gpu}'
+                 f'--{colmap_options["feature_gpu_option"]} {use_gpu}'
     
     if run_command(feature_cmd) != 0:
         raise RuntimeError("Feature extraction failed")
     
+    # Inspect database after feature extraction
+    logger.info("=== Feature Extraction Results ===")
+    inspect_colmap_database(database_path)
+    
     # Feature matching - choose method based on matching_type
+    logger.info(f"=== Step 2: Feature Matching ({props.matching_type}) ===")
     if props.matching_type == 'SEQUENTIAL':
         matching_cmd = f'{colmap_command} sequential_matcher ' \
-                      f'--database_path "{source_path}/distorted/database.db" ' \
-                      f'--SiftMatching.use_gpu {use_gpu}'
+                      f'--database_path "{database_path}" ' \
+                      f'--{colmap_options["matching_gpu_option"]} {use_gpu}'
     else:  # EXHAUSTIVE
         matching_cmd = f'{colmap_command} exhaustive_matcher ' \
-                      f'--database_path "{source_path}/distorted/database.db" ' \
-                      f'--SiftMatching.use_gpu {use_gpu}'
+                      f'--database_path "{database_path}" ' \
+                      f'--{colmap_options["matching_gpu_option"]} {use_gpu}'
     
     if run_command(matching_cmd) != 0:
         raise RuntimeError("Feature matching failed")
     
+    # Inspect database after matching
+    logger.info("=== Feature Matching Results ===")
+    inspect_colmap_database(database_path)
+    
     # Bundle adjustment
+    logger.info("=== Step 3: Bundle Adjustment (Mapper) ===")
     mapper_cmd = f'{colmap_command} mapper ' \
-                f'--database_path "{source_path}/distorted/database.db" ' \
+                f'--database_path "{database_path}" ' \
                 f'--image_path "{input_path}" ' \
                 f'--output_path "{source_path}/distorted/sparse" ' \
                 f'--Mapper.ba_global_function_tolerance=0.000001'
@@ -378,7 +501,29 @@ def run_colmap_processing(props):
     if run_command(mapper_cmd) != 0:
         raise RuntimeError("Bundle adjustment failed")
     
+    # Check reconstruction results
+    sparse_dir = os.path.join(source_path, "distorted", "sparse", "0")
+    if os.path.exists(sparse_dir):
+        try:
+            cameras, images, points3D = read_model(sparse_dir)
+            logger.info(f"=== Reconstruction Results ===")
+            logger.info(f"Reconstructed {len(images)} images out of input images")
+            logger.info(f"Generated {len(points3D)} 3D points")
+            logger.info(f"Used {len(cameras)} camera models")
+            
+            if len(images) < 3:
+                logger.warning(f"WARNING: Only {len(images)} images reconstructed - this may indicate:")
+                logger.warning("1. Insufficient image overlap")
+                logger.warning("2. Poor image quality or lighting")
+                logger.warning("3. Sequential matcher not suitable for this image set")
+                logger.warning("4. Camera model mismatch")
+                logger.warning("Consider trying exhaustive matching or different camera model")
+                
+        except Exception as e:
+            logger.error(f"Could not read reconstruction results: {e}")
+    
     # Image undistortion
+    logger.info("=== Step 4: Image Undistortion ===")
     undist_cmd = f'{colmap_command} image_undistorter ' \
                 f'--image_path "{input_path}" ' \
                 f'--input_path "{source_path}/distorted/sparse/0" ' \
@@ -399,6 +544,7 @@ def run_colmap_processing(props):
         destination_file = os.path.join(source_path, "sparse", "0", file)
         shutil.move(source_file, destination_file)
     
+    logger.info("=== COLMAP Processing Completed ===")
     return True
 
 class SKY_SPLAT_OT_run_colmap(bpy.types.Operator):
