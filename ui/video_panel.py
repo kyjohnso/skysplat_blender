@@ -119,6 +119,14 @@ class SKY_SPLAT_OT_load_video(bpy.types.Operator):
         props.frame_start = 1
         props.frame_end = video_strip.frame_final_duration
         
+        # Calculate frame step to get approximately 150 frames
+        total_frames = video_strip.frame_final_duration - 1 + 1  # +1 because range is inclusive
+        target_frame_count = 150
+        calculated_step = max(1, int(total_frames / target_frame_count))  # Round down and ensure minimum of 1
+        props.frame_step = calculated_step
+        
+        self.report({'INFO'}, f"Auto-calculated frame step: {calculated_step} (will extract ~{total_frames // calculated_step} frames from {total_frames} total)")
+        
         # Switch to the Video Editing workspace if it exists
         if 'Video Editing' in bpy.data.workspaces:
             bpy.context.window.workspace = bpy.data.workspaces['Video Editing']
