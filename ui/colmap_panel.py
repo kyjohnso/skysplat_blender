@@ -262,19 +262,6 @@ class SKY_SPLAT_ColmapProperties(bpy.types.PropertyGroup):
         default='SEQUENTIAL'
     )
     
-    # Coordinate transformation options
-    apply_transform_on_import: bpy.props.BoolProperty(
-        name="Apply Coordinate Transform on Import",
-        description="Convert COLMAP coordinates to Blender coordinate system when importing",
-        default=False
-    )
-    
-    apply_transform_on_export: bpy.props.BoolProperty(
-        name="Apply Coordinate Transform on Export",
-        description="Convert Blender coordinates back to COLMAP coordinate system when exporting",
-        default=False
-    )
-    
     def update_from_video_panel(self, context):
         """Update COLMAP paths based on the frames extracted in the video panel"""
         video_props = context.scene.skysplat_props
@@ -297,16 +284,6 @@ class SKY_SPLAT_ColmapProperties(bpy.types.PropertyGroup):
             self.model_import_path = os.path.join(colmap_output_folder, "sparse", "0")
             self.model_export_path = os.path.join(colmap_output_folder, "transformed")
             self.images_path = os.path.join(colmap_output_folder, "images")
-
-
-def get_coord_transform_matrix():
-    """Get the coordinate transformation matrix from COLMAP to Blender"""
-    # COLMAP: Y down, Z forward
-    # Blender: Y up, -Z forward
-    return mathutils.Matrix(((1, 0, 0, 0),
-                           (0, -1, 0, 0),
-                           (0, 0, -1, 0),
-                           (0, 0, 0, 1)))
 
 
 def run_command(command, cwd=None):
@@ -773,10 +750,6 @@ class SKY_SPLAT_OT_load_colmap_model(bpy.types.Operator):
             collection.objects.link(root)
             root['colmap_root'] = True
             root['colmap_model_path'] = sparse_dir
-            root['import_transform_applied'] = props.apply_transform_on_import
-            
-            # Get coordinate transformation matrix
-            coord_transform = get_coord_transform_matrix() if props.apply_transform_on_import else mathutils.Matrix.Identity(4)
             
             # Create point cloud first
             if points3D:
@@ -788,13 +761,9 @@ class SKY_SPLAT_OT_load_colmap_model(bpy.types.Operator):
                 verts = []
                 colors = []
                 for point_id, point in points3D.items():
-                    # Apply coordinate transformation to point if enabled
+                    # Use COLMAP coordinates directly
                     point_vec = Vector((point.xyz[0], point.xyz[1], point.xyz[2]))
-                    if props.apply_transform_on_import:
-                        transformed_point = coord_transform @ point_vec
-                    else:
-                        transformed_point = point_vec
-                    verts.append(transformed_point)
+                    verts.append(point_vec)
                     colors.append([c/255.0 for c in point.rgb])
                 
                 # Create mesh from vertices
@@ -837,38 +806,36 @@ class SKY_SPLAT_OT_load_colmap_model(bpy.types.Operator):
                 # Camera transformation
                 # In COLMAP, camera transform is world-to-camera, but Blender expects camera-to-world
                 
-                # Get rotation matrix
+                # Get rotation matrix from quaternion
                 R = qvec2rotmat(image.qvec)
                 R = np.array(R)
-                
-                # Compute the inverse (transpose) of rotation
-                R_t = R.T
                 
                 # Get translation vector
                 t = np.array(image.tvec)
                 
-                # Compute camera center in world coordinates
-                cam_center = -R_t @ t
+                # Compute camera center in world coordinates: C = -R^T * t
+                cam_center = -R.T @ t
                 
-                # Convert rotation to Blender matrix
-                rotation = mathutils.Matrix((
-                    (R_t[0][0], R_t[0][1], R_t[0][2]),
-                    (R_t[1][0], R_t[1][1], R_t[1][2]),
-                    (R_t[2][0], R_t[2][1], R_t[2][2])
+                # For Blender, we need the camera-to-world transformation
+                # The rotation part is R^T (inverse of world-to-camera rotation)
+                R_cam_to_world = R.T
+                
+                # Convert to Blender matrix format
+                rotation_matrix = mathutils.Matrix((
+                    (R_cam_to_world[0][0], R_cam_to_world[0][1], R_cam_to_world[0][2]),
+                    (R_cam_to_world[1][0], R_cam_to_world[1][1], R_cam_to_world[1][2]),
+                    (R_cam_to_world[2][0], R_cam_to_world[2][1], R_cam_to_world[2][2])
                 )).to_4x4()
                 
-                # Create translation matrix with camera center
-                translation = mathutils.Matrix.Translation(Vector((cam_center[0], cam_center[1], cam_center[2])))
+                # Set camera location
+                rotation_matrix.translation = Vector((cam_center[0], cam_center[1], cam_center[2]))
                 
-                # Combine to form camera transformation (camera-to-world)
-                transform = translation @ rotation
+                # Apply a 180-degree rotation around the local Y-axis to fix camera direction
+                # This is needed because COLMAP and Blender have different camera conventions
+                y_rotation = mathutils.Matrix.Rotation(math.pi, 4, 'Y')
                 
-                # Apply coordinate system transformation if enabled
-                if props.apply_transform_on_import:
-                    transform = coord_transform @ transform @ coord_transform.inverted()
-                
-                # Set the camera transformation
-                cam_obj.matrix_world = transform
+                # Set the final camera transformation
+                cam_obj.matrix_world = rotation_matrix @ y_rotation
                 
                 # Store COLMAP IDs and original filename information
                 cam_obj['colmap_image_id'] = image_id
@@ -888,8 +855,7 @@ class SKY_SPLAT_OT_load_colmap_model(bpy.types.Operator):
             root.select_set(True)
             bpy.context.view_layer.objects.active = root
             
-            transform_status = "with coordinate transformation" if props.apply_transform_on_import else "without coordinate transformation"
-            self.report({'INFO'}, f"COLMAP model loaded {transform_status} with {len(cameras)} cameras, {len(images)} images, and {len(points3D)} points.")
+            self.report({'INFO'}, f"COLMAP model loaded with {len(cameras)} cameras, {len(images)} images, and {len(points3D)} points.")
             return {'FINISHED'}
         except Exception as e:
             self.report({'ERROR'}, f"Failed to load COLMAP model: {str(e)}")
@@ -931,10 +897,6 @@ class SKY_SPLAT_OT_export_colmap_model(bpy.types.Operator):
             # Get the source model path
             source_path = root['colmap_model_path']
             
-            # Check if transforms were applied on import and if we should apply on export
-            import_transform_applied = root.get('import_transform_applied', True)
-            should_apply_export_transform = props.apply_transform_on_export
-            
             # Create export directory
             export_dir = os.path.join(props.model_export_path, "sparse", "0")
             os.makedirs(export_dir, exist_ok=True)
@@ -942,27 +904,7 @@ class SKY_SPLAT_OT_export_colmap_model(bpy.types.Operator):
             # Read the original model
             cameras, images, points3D = read_model(source_path)
             
-            # Determine coordinate transformation strategy
-            if import_transform_applied and should_apply_export_transform:
-                # Normal case: imported with transform, export with inverse transform
-                coord_transform = get_coord_transform_matrix()
-                use_coord_transform = True
-                logger.info("Using coordinate transformation for export (Blender -> COLMAP)")
-            elif not import_transform_applied and not should_apply_export_transform:
-                # No transforms: imported without transform, export without transform
-                coord_transform = mathutils.Matrix.Identity(4)
-                use_coord_transform = False
-                logger.info("No coordinate transformation applied")
-            elif import_transform_applied and not should_apply_export_transform:
-                # Keep Blender coordinates: imported with transform, but don't convert back
-                coord_transform = mathutils.Matrix.Identity(4)
-                use_coord_transform = False
-                logger.info("Keeping Blender coordinate system for export")
-            else:
-                # Edge case: imported without transform, but apply transform on export
-                coord_transform = get_coord_transform_matrix().inverted()
-                use_coord_transform = True
-                logger.info("Applying coordinate transformation for export (COLMAP -> Blender)")
+            logger.info("Exporting model without coordinate transformation")
             
             # Extract scaling from the root's transformation
             # This is uniform scale - average of X, Y, Z scales
@@ -984,26 +926,19 @@ class SKY_SPLAT_OT_export_colmap_model(bpy.types.Operator):
                     # This is camera-to-world in Blender
                     world_matrix = obj.matrix_world
                     
-                    # Apply coordinate transformation if needed
-                    if use_coord_transform:
-                        if should_apply_export_transform:
-                            # Convert from Blender to COLMAP coordinate system
-                            colmap_matrix = coord_transform.inverted() @ world_matrix @ coord_transform
-                        else:
-                            # Apply the specified transformation
-                            colmap_matrix = coord_transform @ world_matrix @ coord_transform.inverted()
-                    else:
-                        colmap_matrix = world_matrix
-                    
                     # Decompose the matrix to get location, rotation, and scale separately
-                    loc, rot, scale = colmap_matrix.decompose()
+                    loc, rot, scale = world_matrix.decompose()
                     
                     # Keep the scaled location (important!)
                     camera_center = np.array([loc.x, loc.y, loc.z])
                     
                     # Normalize the rotation to remove scale influence (important!)
                     rot_matrix = rot.to_matrix().normalized().to_3x3()
-                    R = np.array(rot_matrix)
+                    
+                    # Need to undo the Y-axis rotation we applied during import
+                    y_rotation_inv = mathutils.Matrix.Rotation(-math.pi, 3, 'Y')
+                    corrected_rotation = rot_matrix @ y_rotation_inv
+                    R = np.array(corrected_rotation)
                     
                     # COLMAP's R is the inverse (transpose) of camera-to-world rotation
                     R_colmap = R.T
@@ -1036,38 +971,14 @@ class SKY_SPLAT_OT_export_colmap_model(bpy.types.Operator):
                 # Get global transformation of the point cloud
                 pc_matrix = point_cloud.matrix_world
                 
-                # Apply coordinate transformation if needed
-                if use_coord_transform:
-                    if should_apply_export_transform:
-                        # Convert to COLMAP coordinate system
-                        pc_colmap_matrix = coord_transform.inverted() @ pc_matrix @ coord_transform
-                    else:
-                        # Apply the specified transformation
-                        pc_colmap_matrix = coord_transform @ pc_matrix @ coord_transform.inverted()
-                else:
-                    pc_colmap_matrix = pc_matrix
-                
                 # Create transformed points3D dictionary
                 transformed_points3D = {}
                 for point_id, point in points3D.items():
                     # Create a vector for the point
                     point_vec = Vector((point.xyz[0], point.xyz[1], point.xyz[2]))
                     
-                    if use_coord_transform and import_transform_applied:
-                        # First transform the original COLMAP point to Blender space
-                        blender_point = get_coord_transform_matrix() @ point_vec
-                        
-                        # Then apply the Blender transformation
-                        transformed_blender_point = pc_matrix @ blender_point
-                        
-                        # Finally convert back to target coordinate system
-                        if should_apply_export_transform:
-                            final_point = coord_transform.inverted() @ transformed_blender_point
-                        else:
-                            final_point = transformed_blender_point
-                    else:
-                        # Apply the transformation directly
-                        final_point = pc_colmap_matrix @ point_vec
+                    # Apply the transformation directly
+                    final_point = pc_matrix @ point_vec
                     
                     # Create a new Point3D object with transformed position
                     transformed_points3D[point_id] = Point3D(
@@ -1085,8 +996,7 @@ class SKY_SPLAT_OT_export_colmap_model(bpy.types.Operator):
             # Write the updated model
             write_model(cameras, images, points3D, export_dir)
             
-            coord_system = "COLMAP" if should_apply_export_transform else "Blender"
-            self.report({'INFO'}, f"Transformed COLMAP model exported to {export_dir} in {coord_system} coordinate system")
+            self.report({'INFO'}, f"Transformed COLMAP model exported to {export_dir}")
             return {'FINISHED'}
         except Exception as e:
             self.report({'ERROR'}, f"Failed to export COLMAP model: {str(e)}")
@@ -1140,22 +1050,6 @@ class SKY_SPLAT_PT_colmap_panel(bpy.types.Panel):
         path_box.prop(props, "model_import_path", text="Import From")
         path_box.prop(props, "model_export_path", text="Export To")
         path_box.prop(props, "images_path", text="Images")
-        
-        # Coordinate transformation options
-        coord_box = box.box()
-        coord_box.label(text="Coordinate System Options:")
-        coord_box.prop(props, "apply_transform_on_import", text="Transform on Import")
-        coord_box.prop(props, "apply_transform_on_export", text="Transform on Export")
-        
-        # Help text
-        if props.apply_transform_on_import and props.apply_transform_on_export:
-            coord_box.label(text="Standard: COLMAP → Blender → COLMAP", icon='INFO')
-        elif not props.apply_transform_on_import and not props.apply_transform_on_export:
-            coord_box.label(text="Raw: Keep COLMAP coordinates", icon='INFO')
-        elif props.apply_transform_on_import and not props.apply_transform_on_export:
-            coord_box.label(text="Blender: COLMAP → Blender (keep)", icon='INFO')
-        else:
-            coord_box.label(text="Custom transformation", icon='INFO')
         
         # Load model button
         box.operator("skysplat.load_colmap_model", icon='IMPORT')
