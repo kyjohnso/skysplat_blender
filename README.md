@@ -45,7 +45,41 @@ SkySplat is a Blender addon that simplifies the workflow for creating 3D Gaussia
 ## Installation
 
 ### 1. Install COLMAP
-   1. [COLMAP](https://colmap.github.io/) Structure From Motion library and application is available from a wide variety of OS repositories. You can also download it and build it from source per the instructions on their home page. For calling from skysplat_blender, the path to the colmap executable will need to be known.
+
+[COLMAP](https://colmap.github.io/) is required for the Structure from Motion reconstruction features. Choose the installation method for your operating system:
+
+#### macOS (Recommended: Homebrew)
+```bash
+brew install colmap
+```
+The executable will be installed to `/opt/homebrew/bin/colmap` (Apple Silicon) or `/usr/local/bin/colmap` (Intel).
+
+#### Linux (Package Manager)
+**Ubuntu/Debian:**
+```bash
+sudo apt update
+sudo apt install colmap
+```
+
+**Fedora/RHEL:**
+```bash
+sudo dnf install colmap
+```
+
+**Arch Linux:**
+```bash
+sudo pacman -S colmap
+```
+
+The executable will typically be installed to `/usr/bin/colmap`.
+
+#### Windows (Pre-compiled Binary)
+1. Download the latest Windows release from [COLMAP GitHub Releases](https://github.com/colmap/colmap/releases)
+2. Extract the ZIP file to a location like `C:\Program Files\COLMAP\`
+3. The executable will be at `C:\Program Files\COLMAP\bin\colmap.exe`
+4. Optionally, add the `bin` directory to your system PATH for easier access
+
+**Note:** For SkySplat to work properly, you'll need to know the path to the COLMAP executable. The addon will attempt to auto-detect common installation paths, but you can manually specify the path in the COLMAP panel if needed.
 
 ### 2. Download and Install SkySplat
 1. Download the latest release zip file from [SkySplat Releases](https://github.com/kyjohnso/skysplat_blender/releases/latest)
