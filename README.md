@@ -44,7 +44,20 @@ SkySplat is a Blender addon that simplifies the workflow for creating 3D Gaussia
 
 ## Installation
 
-### 1. Install COLMAP
+### 1. Download and Install SkySplat
+1. Download the latest release zip file from [SkySplat Releases](https://github.com/kyjohnso/skysplat_blender/releases/latest)
+   
+   **OR**
+   
+   Download the latest development version via the GitHub Download ZIP link under the code button at [skysplat_blender](https://github.com/kyjohnso/skysplat_blender)
+
+   <img src="images/download_zip.png" width="400" alt="Description">
+
+2. Open Blender and navigate to Edit → Preferences → Add-ons
+3. Click "Install..." and select the downloaded ZIP file
+4. Enable the addon by checking the box next to "3D View: SkySplat: 3DGS Blender Toolkit"
+
+### 2. Install COLMAP
 
 [COLMAP](https://colmap.github.io/) is required for the Structure from Motion reconstruction features. Choose the installation method for your operating system:
 
@@ -81,20 +94,73 @@ The executable will typically be installed to `/usr/bin/colmap`.
 
 **Note:** For SkySplat to work properly, you'll need to know the path to the COLMAP executable. The addon will attempt to auto-detect common installation paths, but you can manually specify the path in the COLMAP panel if needed.
 
-### 2. Download and Install SkySplat
-1. Download the latest release zip file from [SkySplat Releases](https://github.com/kyjohnso/skysplat_blender/releases/latest)
+### 3. Install Brush app
+
+The brush app from [brush app](https://github.com/ArthurBrussee/brush#) is needed for the 3DGS training of the scene. The brush binaries for all mac/linux/windows are included with this addon, however, when Blender installs an addon via a zip file, it changes the permissions on the extracted files (this is for everyone's benefit), and these cannot be executed by default. 
+
+You have 3 options for running brush from this addon:
+
+#### Option 1: Fix Permissions on Bundled Binaries (Recommended)
+
+After installing the SkySplat addon, you'll need to make the bundled brush binaries executable:
+
+**macOS/Linux:**
+1. Open Terminal
+2. Navigate to your Blender addons directory:
+   - **macOS**: `~/Library/Application Support/Blender/4.0/scripts/addons/skysplat_blender/binaries/`
+   - **Linux**: `~/.config/blender/4.0/scripts/addons/skysplat_blender/binaries/`
+3. Make the binary executable:
+   ```bash
+   # For macOS
+   chmod +x brush_app_mac
    
-   **OR**
-   
-   Download the latest development version via the GitHub Download ZIP link under the code button at [skysplat_blender](https://github.com/kyjohnso/skysplat_blender)
+   # For Linux
+   chmod +x brush_app_linux
+   ```
 
-   <img src="images/download_zip.png" width="400" alt="Description">
+**Windows:**
+Windows executables should work without permission changes, but if you encounter issues, right-click on [`brush_app_windows.exe`](binaries/brush_app_windows.exe) → Properties → Security → and ensure your user has "Full control" permissions.
 
-2. Open Blender and navigate to Edit → Preferences → Add-ons
-3. Click "Install..." and select the downloaded ZIP file
-4. Enable the addon by checking the box next to "3D View: SkySplat: 3DGS Blender Toolkit"
+#### Option 2: Download Pre-compiled Binaries
 
-**That's it!** The Brush app binaries for Windows, macOS, and Linux are included in the addon, so no additional compilation is required.
+If you prefer to download the binaries separately, you can get them directly from the Brush repository releases:
+
+1. **Windows**: Download [`brush_app_windows.exe`](https://github.com/ArthurBrussee/brush/releases/latest) from Brush Releases
+2. **macOS**: Download [`brush_app_macos`](https://github.com/ArthurBrussee/brush/releases/latest) from Brush Releases
+3. **Linux**: Download [`brush_app_linux`](https://github.com/ArthurBrussee/brush/releases/latest) from Brush Releases
+
+You can also get the compiled binaries in the skysplat_blender repo
+1. **Windows**: [`brush_app_windows.exe`](https://github.com/kyjohnso/skysplat_blender/blob/main/binaries/brush_app_windows.exe)
+2. **macOS (Apple silicon)**: [`brush_app_mac`](https://github.com/kyjohnso/skysplat_blender/blob/main/binaries/brush_app_mac)
+3. **linux**: [`brush_app_linux`](https://github.com/kyjohnso/skysplat_blender/blob/main/binaries/brush_app_linux)
+
+**Important**: You will need to know the full path to where you downloaded these binaries, as you'll need to specify this path in the SkySplat 3DGS panel's "Brush Executable" field.
+
+#### Option 3: Clone and Build Brush from Source
+
+For the most up-to-date version or if you want to modify the source code:
+
+1. **Install Rust** (if not already installed):
+   ```bash
+   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+   source ~/.cargo/env
+   ```
+
+2. **Clone and build Brush**:
+   ```bash
+   git clone https://github.com/ArthurBrussee/brush.git
+   cd brush
+   cargo build --release
+   ```
+
+3. **Locate the executable**:
+   - **Windows**: `target/release/brush_app.exe`
+   - **macOS/Linux**: `target/release/brush_app`
+
+**Important**: You will need to know the full path to the compiled executable (e.g., `/home/username/brush/target/release/brush_app`) as you'll need to specify this path in the SkySplat 3DGS panel's "Brush Executable" field.
+
+**Note**: The SkySplat addon will automatically attempt to detect the bundled binaries first, then fall back to common build locations like `~/projects/brush/target/release/brush_app`. If none are found, you can manually specify the path in the 3DGS panel.
+
 ---
 ## Example Workflow Run Through
 
