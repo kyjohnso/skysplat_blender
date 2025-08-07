@@ -1,7 +1,7 @@
 import bpy
 import os
 
-PANEL_VERSION = "5"  # Updated version number
+PANEL_VERSION = "0.3.0"  # Updated version number
 
 def update_srt_path(self, context):
     """Update SRT path when video path changes"""
