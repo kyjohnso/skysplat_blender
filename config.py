@@ -40,9 +40,9 @@ BUNDLED_BINARY_NAMES = {
 
 # Panel versions (for UI display)
 PANEL_VERSIONS = {
-    "video": "5",
-    "colmap": "0.5.0", 
-    "gaussian_splatting": "0.2.0-brush"
+    "video": "0.3.0",
+    "colmap": "0.3.0",
+    "gaussian_splatting": "0.3.0"
 }
 
 def get_addon_directory():
