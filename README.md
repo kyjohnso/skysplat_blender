@@ -169,7 +169,7 @@ For the most up-to-date version or if you want to modify the source code:
    - Select the "SkySplat" tab
 
 2. **Loading Drone Footage**
-   - You can download the example video used in this walkthrough at [windsor_silo](https://skysplat.net/DJI_20240730101124_0020_D_windsor_silo.MP4) (right click and save as)
+   - You can download the example video used in this walkthrough at [windsor_silo](https://skysplat.net/DJI_20250731122012_0009_D_windsor_silo_new_small.mp4) (right click and save as) (This is a new video of the silo that tends to work better in COLMAP)
    - Select your video file in the "Video File" field in the 3D Viewport
    - If available, the SRT metadata file will be detected automatically
    - Click "Load Video and SRT" to import into the Video Sequencer
@@ -177,13 +177,13 @@ For the most up-to-date version or if you want to modify the source code:
 <img src="images/video_loader_panel.png" width="400" alt="Description">
 
 3. **Extracting Frames**
-   - Set your desired frame range and step value, we suggest a step size between 5 and 10 for the sample silo video. Smaller step size means more frames and better reconstruction, but also longer processing times.
+   - Set your desired frame range and step value, Version 0.3.0 of SkySplat will automatically select the frame step value to get the total number of extracted frames to about 170. Smaller step size means more frames and better reconstruction, but also longer processing times.
    - Confirm or modify the output folder
    - Click "Extract Frames" to process
 
 4. **COLMAP Workflow**
    - Configure COLMAP settings in the SkySplat COLMAP panel
-   - COLMAP Executable should auto populate with your systems default path, however you can manually set it if needed
+   - COLMAP Executable should auto populate with your systems default path, however you can manually set it if needed (on MacOS this path will be /opt/homebrew/bin/colmap if you used the homebrew as the install method as described above)
    - If the input and output paths for the models aren't loaded, you can click the chain link icon to auto populate them from the video file path and defaults.
    - The defaults for the other settings should be sufficient for your first few runs. 
    - Click "Run COLMAP" to begin processing your video frames into a sparse point cloud (you can monitor the console running blender for detailed colmap output)
@@ -191,8 +191,12 @@ For the most up-to-date version or if you want to modify the source code:
 <img src="images/colmap_panel.png" width="400" alt="Description">
 
 5. **COLMAP Model Transformation**
-   This step was the main reason I came up with this workflow. COLMAP will default the coordinate frame to the frame of the initial camera pose. This means that for many gaussian splatting drone videos, it is slightly tilted down and at the first camera origin, rather than being at a natural center of the scene. This panel lets you load the COLMAP output model, scale, rotate, and translate the parent object in blender to a more natural scale, position, and orientation, and then export the model before gaussian splatting training.
-   - Click "Load COLMAP Model" after running COLMAP (future versions will make explicit the location of the model to load from, however for now it is the same location as the output of COLMAP that you selected above). Note that the defaults of Transform on Import and Transform on Export are not selected by default, because we are transforming the COLMAP model in blender, we don't necessarily need the addon to do any transformations for us. This will however leave the imported cameras facing the wrong direction but this does not affect the subsequent 3DGS training. 
+   This step was the main reason I came up with this workflow. COLMAP will default the coordinate frame to the frame of the initial camera pose. This means that for many gaussian splatting drone videos, it is slightly tilted down and at the first camera origin, rather than being at a natural center of the scene. The colmap transformation panel lets you load the COLMAP output model, scale, rotate, and translate the parent object in blender to a more natural scale, position, and orientation, and then export the model before gaussian splatting training.
+
+   <img src="images/colmap_transformation_panel.png" width="400" alt="Description">
+
+
+   - Click "Load COLMAP Model" after running COLMAP and it will load the output COLMAP model into blender. You can also go straight to this step in Blender if you already processed your images outside of SkySplat.
 
    ![loaded COLMAP model](images/rotate_and_scale_colmap_1.png)
 
@@ -202,17 +206,17 @@ For the most up-to-date version or if you want to modify the source code:
 
    ![rotate and scale colmap 0](images/rotate_and_scale_colmap_0.png)
 
-   - For the example silo video, I rotated it so the natural ground was in the X-Y plane, and the origin was at the base of the silo. 
+   - For the example silo video, I rotated it so the natural ground was in the X-Y plane, and the origin was at the base of the silo. You can also use a google maps or OSM image with a scale so that you can right size the COLMAP and hence 3DGS models. I have included a screen shot of a map from this silo video at [silo reference map](https://skysplat.net/google_earth_reference_silo.png)
+
+   ![silo reference map](https://skysplat.net/google_earth_reference_silo.png)
+
+   This is one of the highlights of working with COLMAP and 3DGS in Blender, the ability to include other 3D assets, models, and features in a cohesive 3d environment.
 
    ![rotate and scale colmap 2](images/rotate_and_scale_colmap_2.png)
 
-   - This is where the true power of this workflow starts to shine. Because I have yet to incorporate the SRT file, and COLMAP is capable of SfM without explicit camera locations or parameters, the learned scene can be rather small. In this case I added a Blender mesh that is approximately the size of the silo in the scene, and then (again by selecting the COLMAP_Root empty) can scale the model to fit the points on the top of the silo to the top of the mesh silo.
+   Now I can export the model scaled and rotated into a more natural coordinate system, and the 3DGS code will start with these parameters when it fits the gaussians. 
 
-   ![rotate and scale colmap 3](images/rotate_and_scale_colmap_3.png)
-   ![rotate and scale colmap 4](images/rotate_and_scale_colmap_4.png)
-   ![rotate and scale colmap 5](images/rotate_and_scale_colmap_5.png)
-
-   Now I can export the model scaled and rotated into a more natural coordinate system, and the 3DGS code will start with these parameters when it fits the gaussians.
+   <img src="(images/colmap_transformation_panel.png" width="400" alt="Description">
 
     - Click "Export COLMAP Model" after you have finished transforming and adjusting your model, this will export a new model in the <colmap output directory>/transformed/ directory.
 
@@ -220,6 +224,9 @@ For the most up-to-date version or if you want to modify the source code:
    
 
 6. **Brush Training (3D Gaussian Splatting)**
+
+<img src="images/3dgs_brush_app_panel.png" width="400" alt="Description">
+
    - Configure Brush settings in the SkySplat 3DGS panel (as shown in the image below)
    - The Brush Executable path will auto-populate with the bundled binary for your platform (Windows, macOS, or Linux)
    - Use the chain link icon next to the Source Path to automatically sync with your COLMAP output
@@ -229,25 +236,24 @@ For the most up-to-date version or if you want to modify the source code:
      - **Total Steps**: Number of training iterations (default: 30000)
      - **Max Resolution**: Maximum image resolution for training (default: 1920)
      - **With Viewer**: Enable this to pop up the interactive viewer application that shows real-time training progress
+   - If you want to watch the brush app training live you can click the "viewer" button. This will run brush with the UI and show the 3DGS model as it is trained.
    - Advanced options are available by expanding the "Show Advanced Options" section for fine-tuning learning rates, refinement parameters, and dataset options
    - Click "Run Brush Training" to start the process
    - Unlike the original Gaussian Splatting implementation, Brush runs as a subprocess so it won't block the Blender UI
    - Monitor progress in the Blender console, or if you enabled "With Viewer", watch the training progress in the dedicated viewer window
    - The training process will automatically export .ply files at specified intervals to your Export Path
 
+![brush training 1](images/brush_training_1.png)
 
-<img src="images/3dgs_brush_app_panel.png" width="400" alt="Description">
 
 7. **3DGS Loading**
    There is already a rich Blender addon ecosystem for loading 3D gaussian splats into Blender. I recommend [KIRI Innovation's 3DGS Render Addon](https://github.com/Kiri-Innovation/3dgs-render-blender-addon) and you can see it in my Blender screen shots above if you look closely. I recommend loading the ply file without transforming from COLMAP to Blender coordinates mainly because we already did a transformation and scaling in the previous step. If everything worked you will now have your transformed COLMAP model, any helper "reference silos" you created in blender, and the 3D Gaussian Splat ready to create whatever awesome render or animation you are working on. 
 
-![silo_colmap_and_3dgs_0](images/silo_colmap_and_3dgs_0.png)
-![silo_colmap_and_3dgs_1](images/silo_colmap_and_3dgs_1.png)
-![silo_colmap_and_3dgs_2](images/silo_colmap_and_3dgs_2.png)
-![silo_colmap_and_3dgs_3](images/silo_colmap_and_3dgs_3.png)
-![silo_colmap_and_3dgs_4](images/silo_colmap_and_3dgs_4.png)
-![silo_colmap_and_3dgs_5](images/silo_colmap_and_3dgs_5.png)
-![silo_colmap_and_3dgs_6](images/silo_colmap_and_3dgs_6.png)
+![silo_colmap_and_3dgs_1](images/3dgs_model_loaded_1.png)
+![silo_colmap_and_3dgs_2](images/3dgs_model_loaded_2.png)
+![silo_colmap_and_3dgs_3](images/3dgs_model_loaded_3.png)
+![silo_colmap_and_3dgs_4](images/3dgs_model_loaded_4.png)
+![silo_colmap_and_3dgs_5](images/3dgs_model_loaded_5.png)
 
 ## Contributing
 
