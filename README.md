@@ -216,7 +216,7 @@ For the most up-to-date version or if you want to modify the source code:
 
    Now I can export the model scaled and rotated into a more natural coordinate system, and the 3DGS code will start with these parameters when it fits the gaussians. 
 
-   <img src="(images/colmap_transformation_panel.png" width="400" alt="Description">
+   <img src="images/colmap_transformation_panel.png" width="400" alt="Colmap Transformation Panel">
 
     - Click "Export COLMAP Model" after you have finished transforming and adjusting your model, this will export a new model in the <colmap output directory>/transformed/ directory.
 
