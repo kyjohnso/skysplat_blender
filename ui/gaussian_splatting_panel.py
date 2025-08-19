@@ -248,7 +248,7 @@ class SkySplatBrushProperties(PropertyGroup):
     with_viewer: BoolProperty(
         name="With Viewer",
         description="Spawn a viewer to visualize the training",
-        default=False
+        default=True
     )
     
     eval_every: IntProperty(
