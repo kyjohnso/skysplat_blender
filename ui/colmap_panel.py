@@ -49,6 +49,7 @@ def get_default_colmap_path():
         possible_paths = [
             "/Applications/COLMAP.app/Contents/MacOS/colmap",
             "/usr/local/bin/colmap",
+            "/opt/homebrew/bin/colmap",
             os.path.expanduser("~/Applications/COLMAP.app/Contents/MacOS/colmap")
         ]
         for path in possible_paths:
@@ -830,12 +831,13 @@ class SKY_SPLAT_OT_load_colmap_model(bpy.types.Operator):
                 # Set camera location
                 rotation_matrix.translation = Vector((cam_center[0], cam_center[1], cam_center[2]))
                 
-                # Apply a 180-degree rotation around the local Y-axis to fix camera direction
-                # This is needed because COLMAP and Blender have different camera conventions
-                y_rotation = mathutils.Matrix.Rotation(math.pi, 4, 'Y')
+                # Apply coordinate system transformation to fix camera orientation
+                # COLMAP uses a different camera coordinate system than Blender
+                # We need to rotate 180 degrees around X-axis to flip the camera right-side up
+                x_rotation = mathutils.Matrix.Rotation(math.pi, 4, 'X')
                 
                 # Set the final camera transformation
-                cam_obj.matrix_world = rotation_matrix @ y_rotation
+                cam_obj.matrix_world = rotation_matrix @ x_rotation
                 
                 # Store COLMAP IDs and original filename information
                 cam_obj['colmap_image_id'] = image_id
@@ -935,9 +937,9 @@ class SKY_SPLAT_OT_export_colmap_model(bpy.types.Operator):
                     # Normalize the rotation to remove scale influence (important!)
                     rot_matrix = rot.to_matrix().normalized().to_3x3()
                     
-                    # Need to undo the Y-axis rotation we applied during import
-                    y_rotation_inv = mathutils.Matrix.Rotation(-math.pi, 3, 'Y')
-                    corrected_rotation = rot_matrix @ y_rotation_inv
+                    # Need to undo the X-axis rotation we applied during import
+                    x_rotation_inv = mathutils.Matrix.Rotation(-math.pi, 3, 'X')
+                    corrected_rotation = rot_matrix @ x_rotation_inv
                     R = np.array(corrected_rotation)
                     
                     # COLMAP's R is the inverse (transpose) of camera-to-world rotation
