@@ -1037,8 +1037,13 @@ class SKY_SPLAT_PT_colmap_panel(bpy.types.Panel):
         
         box.prop(props, "output_folder")
         
-        # Run COLMAP button
-        box.operator("skysplat.run_colmap", icon='CAMERA_DATA')
+        # COLMAP execution options
+        row = box.row(align=True)
+        row.operator("skysplat.run_colmap", icon='CAMERA_DATA', text="Run CLI")
+        row.operator("skysplat.run_colmap_gui", icon='WINDOW', text="Launch GUI")
+        
+        # Automatic reconstruction option
+        box.operator("skysplat.run_colmap_automatic", icon='AUTO', text="Auto Reconstruction")
         
         # COLMAP model transformation section
         box = layout.box()
@@ -1108,7 +1113,7 @@ classes = (
     SKY_SPLAT_OT_sync_with_video,
     SKY_SPLAT_OT_load_colmap_model,
     SKY_SPLAT_OT_export_colmap_model,
-    SKY_SPLAT_OT_prepare_brush_dataset,  
+    SKY_SPLAT_OT_prepare_brush_dataset,
     SKY_SPLAT_PT_colmap_panel,
 )
 
