@@ -172,6 +172,39 @@ For the most up-to-date version or if you want to modify the source code:
 **Note**: The SkySplat addon will automatically attempt to detect the bundled binaries first, then fall back to common build locations like `~/projects/brush/target/release/brush_app`. If none are found, you can manually specify the path in the 3DGS panel.
 
 ---
+
+## Running Blender from Command Line
+
+To monitor the detailed output of COLMAP processing, Brush training, and other operations, it's recommended to run Blender from the command line. This allows you to see real-time console output and debug information that isn't visible in the Blender GUI.
+
+### Command Line Usage
+
+**macOS:**
+```bash
+/Applications/Blender.app/Contents/MacOS/Blender
+```
+
+**Linux:**
+```bash
+blender
+```
+
+**Windows:**
+```cmd
+"C:\Program Files\Blender Foundation\Blender 4.0\blender.exe"
+```
+
+### Benefits of CLI Usage
+
+- **COLMAP Output**: See detailed reconstruction progress, feature detection statistics, and any error messages
+- **Brush Training**: Monitor training iterations, loss values, and performance metrics in real-time
+- **Debug Information**: View Python error traces and addon-specific logging
+- **Process Monitoring**: Track subprocess execution and completion status
+
+When running operations like "Run COLMAP" or "Run Brush Training", the detailed output will appear in the terminal where you launched Blender, making it much easier to troubleshoot issues or monitor progress.
+
+---
+
 ## Example Workflow Run Through
 
 1. **Accessing the Toolkit**
