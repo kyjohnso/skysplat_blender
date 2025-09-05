@@ -1,5 +1,6 @@
 import bpy
 import os
+import time
 
 PANEL_VERSION = "0.3.0"  # Updated version number
 
@@ -146,6 +147,9 @@ class SKY_SPLAT_OT_extract_frames(bpy.types.Operator):
     bl_description = "Extract frames from the loaded video"
     
     def execute(self, context):
+        # Start timing
+        start_time = time.time()
+        
         props = context.scene.skysplat_props
         
         # Validate required fields
@@ -203,6 +207,11 @@ class SKY_SPLAT_OT_extract_frames(bpy.types.Operator):
             
             # Open the output folder
             bpy.ops.wm.path_open(filepath=output_folder)
+            
+            # Calculate and print timing
+            end_time = time.time()
+            total_time = end_time - start_time
+            print(f"Frame extraction completed in {total_time:.2f} seconds")
             
             self.report({'INFO'}, f"Successfully extracted {frame_count} frames to {output_folder}")
             
