@@ -39,6 +39,7 @@ SkySplat is a Blender addon that simplifies the workflow for creating 3D Gaussia
 
 - Blender 4.0.0 or newer
 - COLMAP (for reconstruction features)
+- [Brush App](https://github.com/ArthurBrussee/brush) from Arthur Brussee.
 
 **Note**: The [Brush App](https://github.com/ArthurBrussee/brush) for Gaussian Splatting is now bundled with the addon - no separate installation required!
 
@@ -113,7 +114,10 @@ After installing the SkySplat addon, you'll need to make the bundled brush binar
    ```bash
    # For macOS
    chmod +x brush_app_mac
-   
+   ```
+ 
+
+   ```bash
    # For Linux
    chmod +x brush_app_linux
    ```
@@ -127,6 +131,12 @@ If you prefer to download the binaries separately, you can get them directly fro
 
 1. **Windows**: Download [`brush_app_windows.exe`](https://github.com/ArthurBrussee/brush/releases/latest) from Brush Releases
 2. **macOS**: Download [`brush_app_macos`](https://github.com/ArthurBrussee/brush/releases/latest) from Brush Releases
+
+  On macos, if you get an error something to the effect of "Apple could not verify "brush_app_mac" you may need to remove the quarantine from the downloaded file. This applies to downloads from the brush repo as well as the skysplat repo.
+
+   ```bash
+   xattr -d com.apple.quarantine /path/to/brush_app_mac
+   ```
 3. **Linux**: Download [`brush_app_linux`](https://github.com/ArthurBrussee/brush/releases/latest) from Brush Releases
 
 You can also get the compiled binaries in the skysplat_blender repo
