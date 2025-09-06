@@ -7,6 +7,7 @@ import logging
 import platform
 import sys
 import json
+import time
 
 import numpy as np
 import mathutils
@@ -536,10 +537,13 @@ class SKY_SPLAT_OT_run_colmap(bpy.types.Operator):
         return props.input_folder and os.path.exists(props.input_folder) and props.output_folder
     
     def execute(self, context):
+        # Start timing
+        start_time = time.time()
+        
         props = context.scene.skysplat_colmap_props
         
         # Test if input folder contains images
-        image_files = [f for f in os.listdir(props.input_folder) 
+        image_files = [f for f in os.listdir(props.input_folder)
                       if f.lower().endswith(('.jpg', '.png', '.jpeg'))]
         
         if not image_files:
@@ -567,6 +571,11 @@ class SKY_SPLAT_OT_run_colmap(bpy.types.Operator):
             props.images_path = os.path.join(props.output_folder, "images")
             if not props.model_export_path:
                 props.model_export_path = os.path.join(props.output_folder, "transformed")
+            
+            # Calculate and print timing
+            end_time = time.time()
+            total_time = end_time - start_time
+            print(f"COLMAP processing completed in {total_time:.2f} seconds")
             
             self.report({'INFO'}, f"COLMAP processing completed successfully")
             return {'FINISHED'}
