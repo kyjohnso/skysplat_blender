@@ -39,6 +39,7 @@ SkySplat is a Blender addon that simplifies the workflow for creating 3D Gaussia
 
 - Blender 4.0.0 or newer
 - COLMAP (for reconstruction features)
+- [Brush App](https://github.com/ArthurBrussee/brush) from Arthur Brussee.
 
 **Note**: The [Brush App](https://github.com/ArthurBrussee/brush) for Gaussian Splatting is now bundled with the addon - no separate installation required!
 
@@ -113,7 +114,10 @@ After installing the SkySplat addon, you'll need to make the bundled brush binar
    ```bash
    # For macOS
    chmod +x brush_app_mac
-   
+   ```
+ 
+
+   ```bash
    # For Linux
    chmod +x brush_app_linux
    ```
@@ -127,6 +131,12 @@ If you prefer to download the binaries separately, you can get them directly fro
 
 1. **Windows**: Download [`brush_app_windows.exe`](https://github.com/ArthurBrussee/brush/releases/latest) from Brush Releases
 2. **macOS**: Download [`brush_app_macos`](https://github.com/ArthurBrussee/brush/releases/latest) from Brush Releases
+
+  On macos, if you get an error something to the effect of "Apple could not verify "brush_app_mac" you may need to remove the quarantine from the downloaded file. This applies to downloads from the brush repo as well as the skysplat repo.
+
+   ```bash
+   xattr -d com.apple.quarantine /path/to/brush_app_mac
+   ```
 3. **Linux**: Download [`brush_app_linux`](https://github.com/ArthurBrussee/brush/releases/latest) from Brush Releases
 
 You can also get the compiled binaries in the skysplat_blender repo
@@ -162,6 +172,39 @@ For the most up-to-date version or if you want to modify the source code:
 **Note**: The SkySplat addon will automatically attempt to detect the bundled binaries first, then fall back to common build locations like `~/projects/brush/target/release/brush_app`. If none are found, you can manually specify the path in the 3DGS panel.
 
 ---
+
+## Running Blender from Command Line
+
+To monitor the detailed output of COLMAP processing, Brush training, and other operations, it's recommended to run Blender from the command line. This allows you to see real-time console output and debug information that isn't visible in the Blender GUI.
+
+### Command Line Usage
+
+**macOS:**
+```bash
+/Applications/Blender.app/Contents/MacOS/Blender
+```
+
+**Linux:**
+```bash
+blender
+```
+
+**Windows:**
+```cmd
+"C:\Program Files\Blender Foundation\Blender 4.0\blender.exe"
+```
+
+### Benefits of CLI Usage
+
+- **COLMAP Output**: See detailed reconstruction progress, feature detection statistics, and any error messages
+- **Brush Training**: Monitor training iterations, loss values, and performance metrics in real-time
+- **Debug Information**: View Python error traces and addon-specific logging
+- **Process Monitoring**: Track subprocess execution and completion status
+
+When running operations like "Run COLMAP" or "Run Brush Training", the detailed output will appear in the terminal where you launched Blender, making it much easier to troubleshoot issues or monitor progress.
+
+---
+
 ## Example Workflow Run Through
 
 1. **Accessing the Toolkit**
