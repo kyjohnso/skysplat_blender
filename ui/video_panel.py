@@ -257,6 +257,33 @@ class SKY_SPLAT_OT_load_video(bpy.types.Operator):
         if video_instance.srt_path and os.path.exists(bpy.path.abspath(video_instance.srt_path)):
             self.report({'INFO'}, f"SRT file loaded: {video_instance.srt_path} (metadata only)")
         
+        # Auto-create a corresponding COLMAP instance with correct paths
+        if hasattr(context.scene, 'skysplat_colmap_props'):
+            colmap_props = context.scene.skysplat_colmap_props
+            
+            # Get video name for naming the COLMAP instance
+            video_name = os.path.splitext(os.path.basename(video_path))[0]
+            
+            # Create new COLMAP instance
+            new_colmap = colmap_props.colmap_instances.add()
+            new_colmap.name = f"COLMAP_{video_name}"
+            
+            # Set up paths based on video
+            video_dir = os.path.dirname(video_path)
+            frames_folder = os.path.join(video_dir, f"{video_name}_frames")
+            colmap_output_folder = os.path.join(video_dir, f"{video_name}_colmap_output")
+            
+            new_colmap.input_folder = frames_folder
+            new_colmap.output_folder = colmap_output_folder
+            new_colmap.model_import_path = os.path.join(colmap_output_folder, "sparse", "0")
+            new_colmap.model_export_path = os.path.join(colmap_output_folder, "transformed")
+            new_colmap.images_path = os.path.join(colmap_output_folder, "images")
+            
+            # Set the new COLMAP instance as active
+            colmap_props.active_colmap_index = len(colmap_props.colmap_instances) - 1
+            
+            self.report({'INFO'}, f"Auto-created COLMAP instance: {new_colmap.name}")
+        
         self.report({'INFO'}, f"Loaded video into sequencer: {video_instance.video_path}")
         return {'FINISHED'}
 
