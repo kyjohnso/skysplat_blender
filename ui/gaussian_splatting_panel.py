@@ -1,3 +1,4 @@
+
 import bpy
 import os
 import subprocess
@@ -8,7 +9,7 @@ from bpy.props import StringProperty, IntProperty, FloatProperty, BoolProperty, 
 from ..config import BUNDLED_BINARY_NAMES, get_bundled_binaries_directory
 
 # Version for UI display
-PANEL_VERSION = "0.3.0"
+PANEL_VERSION = "0.4.0"  # Updated for multi-instance support
 
 def update_export_path_from_source(self, context):
     """Auto-update export path when source path changes"""
@@ -67,13 +68,12 @@ def get_default_brush_path():
     
     return ""
 
-class SkySplatBrushProperties(PropertyGroup):
-    # Brush executable path
-    brush_executable: StringProperty(
-        name="Brush Executable",
-        description="Path to the brush executable",
-        subtype='FILE_PATH',
-        default=get_default_brush_path()
+class SplatInstance(PropertyGroup):
+    """Individual Gaussian Splatting instance with its own settings"""
+    name: StringProperty(
+        name="Instance Name",
+        description="Name for this splat instance",
+        default="Splat"
     )
     
     # Path settings
@@ -285,6 +285,42 @@ class SkySplatBrushProperties(PropertyGroup):
         min=0
     )
     
+    # Status flags
+    is_training: BoolProperty(
+        name="Is Training",
+        description="Whether this instance is currently training",
+        default=False
+    )
+    
+    training_completed: BoolProperty(
+        name="Training Completed",
+        description="Whether training has completed for this instance",
+        default=False
+    )
+
+class SkySplatBrushProperties(PropertyGroup):
+    """Main property group for Gaussian Splatting management"""
+    splat_instances: bpy.props.CollectionProperty(
+        type=SplatInstance,
+        name="Splat Instances",
+        description="Collection of Gaussian Splatting instances"
+    )
+    
+    active_splat_index: IntProperty(
+        name="Active Splat Index",
+        description="Index of the currently active splat instance",
+        default=0,
+        min=0
+    )
+    
+    # Brush executable path (shared across all instances)
+    brush_executable: StringProperty(
+        name="Brush Executable",
+        description="Path to the brush executable",
+        subtype='FILE_PATH',
+        default=get_default_brush_path()
+    )
+    
     # Advanced options toggle
     show_advanced: BoolProperty(
         name="Show Advanced Options",
@@ -298,37 +334,107 @@ class SkySplatBrushProperties(PropertyGroup):
         default=False
     )
     
+    # Legacy properties for backward compatibility
+    source_path: StringProperty(
+        name="Source Path",
+        description="Path to COLMAP model directory (legacy)",
+        subtype='DIR_PATH',
+        update=update_export_path_from_source
+    )
+    
+    export_path: StringProperty(
+        name="Export Path",
+        description="Location to put exported files (legacy)",
+        subtype='DIR_PATH'
+    )
+    
+    export_name: StringProperty(
+        name="Export Name",
+        description="Filename pattern for exported ply files (legacy)",
+        default="export_{iter}.ply"
+    )
+    
+    total_steps: IntProperty(
+        name="Total Steps",
+        description="Total number of steps to train for (legacy)",
+        default=30000,
+        min=1000
+    )
+    
     def update_from_colmap_panel(self, context):
         """Update paths from COLMAP panel settings"""
         if hasattr(context.scene, 'skysplat_colmap_props'):
             colmap_props = context.scene.skysplat_colmap_props
-            if colmap_props.output_folder:
-                # Prioritize brush_dataset if it exists
-                brush_dataset_path = os.path.join(colmap_props.output_folder, "brush_dataset")
-                if os.path.exists(brush_dataset_path):
-                    self.source_path = brush_dataset_path
-                else:
-                    # Use transformed model if it exists, otherwise use sparse model
-                    transformed_path = os.path.join(colmap_props.output_folder, "transformed")
-                    if os.path.exists(transformed_path):
-                        self.source_path = transformed_path
-                    else:
-                        sparse_path = os.path.join(colmap_props.output_folder, "sparse", "0")
-                        if os.path.exists(sparse_path):
-                            self.source_path = sparse_path
+            
+            # Get active COLMAP instance
+            if len(colmap_props.colmap_instances) > 0:
+                colmap_instance = colmap_props.colmap_instances[colmap_props.active_colmap_index]
                 
-                # Set export path with video name prefix
-                if not self.export_path:
-                    # Extract video name from colmap output folder path
-                    # colmap_output_folder typically follows pattern: {video_name}_colmap_output
-                    output_folder_name = os.path.basename(colmap_props.output_folder)
-                    if output_folder_name.endswith('_colmap_output'):
-                        video_name = output_folder_name[:-14]  # Remove '_colmap_output' suffix
-                        parent_dir = os.path.dirname(colmap_props.output_folder)
-                        self.export_path = os.path.join(parent_dir, f"{video_name}_brush_output")
+                if colmap_instance.output_folder:
+                    # Get or create matching splat instance
+                    if len(self.splat_instances) == 0:
+                        splat_instance = self.splat_instances.add()
+                        splat_instance.name = f"Splat_{colmap_instance.name}"
+                        self.active_splat_index = 0
                     else:
-                        # Fallback to generic name if pattern doesn't match
-                        self.export_path = os.path.join(colmap_props.output_folder, "brush_output")
+                        splat_instance = self.splat_instances[self.active_splat_index]
+                    
+                    # Prioritize brush_dataset if it exists
+                    brush_dataset_path = os.path.join(os.path.dirname(colmap_instance.output_folder), "brush_dataset")
+                    if os.path.exists(brush_dataset_path):
+                        splat_instance.source_path = brush_dataset_path
+                    else:
+                        # Use transformed model if it exists, otherwise use sparse model
+                        transformed_path = os.path.join(colmap_instance.output_folder, "transformed")
+                        if os.path.exists(transformed_path):
+                            splat_instance.source_path = transformed_path
+                        else:
+                            sparse_path = os.path.join(colmap_instance.output_folder, "sparse", "0")
+                            if os.path.exists(sparse_path):
+                                splat_instance.source_path = sparse_path
+                    
+                    # Set export path with video name prefix
+                    if not splat_instance.export_path:
+                        # Extract video name from colmap output folder path
+                        output_folder_name = os.path.basename(colmap_instance.output_folder)
+                        if output_folder_name.endswith('_colmap_output'):
+                            video_name = output_folder_name[:-14]  # Remove '_colmap_output' suffix
+                            parent_dir = os.path.dirname(colmap_instance.output_folder)
+                            splat_instance.export_path = os.path.join(parent_dir, f"{video_name}_brush_output")
+                        else:
+                            # Fallback to generic name if pattern doesn't match
+                            splat_instance.export_path = os.path.join(colmap_instance.output_folder, "brush_output")
+
+class SKY_SPLAT_OT_add_splat_instance(Operator):
+    bl_idname = "skysplat.add_splat_instance"
+    bl_label = "Add Splat Instance"
+    bl_description = "Add a new Gaussian Splatting instance"
+    
+    def execute(self, context):
+        props = context.scene.skysplat_brush_props
+        new_instance = props.splat_instances.add()
+        new_instance.name = f"Splat_{len(props.splat_instances)}"
+        props.active_splat_index = len(props.splat_instances) - 1
+        self.report({'INFO'}, f"Added splat instance: {new_instance.name}")
+        return {'FINISHED'}
+
+class SKY_SPLAT_OT_remove_splat_instance(Operator):
+    bl_idname = "skysplat.remove_splat_instance"
+    bl_label = "Remove Splat Instance"
+    bl_description = "Remove the active splat instance"
+    
+    @classmethod
+    def poll(cls, context):
+        props = context.scene.skysplat_brush_props
+        return len(props.splat_instances) > 0
+    
+    def execute(self, context):
+        props = context.scene.skysplat_brush_props
+        if len(props.splat_instances) > 0:
+            props.splat_instances.remove(props.active_splat_index)
+            props.active_splat_index = max(0, props.active_splat_index - 1)
+            self.report({'INFO'}, "Removed splat instance")
+        return {'FINISHED'}
 
 class SKY_SPLAT_OT_sync_brush_with_colmap(Operator):
     bl_idname = "skysplat.sync_brush_with_colmap"
@@ -351,22 +457,32 @@ class SKY_SPLAT_OT_run_brush_training(Operator):
     _process = None
     _finished = False
     _output_lines = []
+    _instance_index = -1
     
     @classmethod
     def poll(cls, context):
         props = context.scene.skysplat_brush_props
+        if len(props.splat_instances) == 0:
+            return False
+        splat_instance = props.splat_instances[props.active_splat_index]
         return (props.brush_executable and 
-                props.source_path and 
-                os.path.exists(props.source_path))
+                splat_instance.source_path and 
+                os.path.exists(splat_instance.source_path) and
+                not splat_instance.is_training)
     
     def modal(self, context, event):
         if event.type == 'TIMER':
             if self._finished:
                 self.cancel(context)
-                if self._process and self._process.returncode == 0:
-                    self.report({'INFO'}, "Brush training completed successfully!")
-                else:
-                    self.report({'ERROR'}, "Brush training failed!")
+                props = context.scene.skysplat_brush_props
+                if self._instance_index >= 0 and self._instance_index < len(props.splat_instances):
+                    splat_instance = props.splat_instances[self._instance_index]
+                    splat_instance.is_training = False
+                    if self._process and self._process.returncode == 0:
+                        splat_instance.training_completed = True
+                        self.report({'INFO'}, f"Brush training completed for {splat_instance.name}!")
+                    else:
+                        self.report({'ERROR'}, f"Brush training failed for {splat_instance.name}!")
                 return {'FINISHED'}
         return {'PASS_THROUGH'}
     
@@ -386,6 +502,7 @@ class SKY_SPLAT_OT_run_brush_training(Operator):
     
     def execute(self, context):
         props = context.scene.skysplat_brush_props
+        splat_instance = props.splat_instances[props.active_splat_index]
         
         # Validate brush executable
         if not props.brush_executable:
@@ -393,25 +510,29 @@ class SKY_SPLAT_OT_run_brush_training(Operator):
             return {'CANCELLED'}
         
         # Validate source path
-        if not props.source_path or not os.path.exists(props.source_path):
+        if not splat_instance.source_path or not os.path.exists(splat_instance.source_path):
             self.report({'ERROR'}, "Source path does not exist")
             return {'CANCELLED'}
         
         # Create export directory if specified
-        if props.export_path:
-            os.makedirs(props.export_path, exist_ok=True)
+        if splat_instance.export_path:
+            os.makedirs(splat_instance.export_path, exist_ok=True)
         
         # Build command
         try:
-            command = self.build_brush_command(props)
-            print(f"Running Brush command: {' '.join(command)}")
+            command = self.build_brush_command(props, splat_instance)
+            print(f"Running Brush command for {splat_instance.name}: {' '.join(command)}")
             
             # Reset state
             self._finished = False
             self._output_lines = []
+            self._instance_index = props.active_splat_index
+            
+            # Mark as training
+            splat_instance.is_training = True
             
             # Start training in a separate thread
-            self._thread = threading.Thread(target=self.run_training, args=(command, props))
+            self._thread = threading.Thread(target=self.run_training, args=(command, splat_instance))
             self._thread.start()
             
             # Start modal timer
@@ -419,87 +540,88 @@ class SKY_SPLAT_OT_run_brush_training(Operator):
             self._timer = wm.event_timer_add(0.1, window=context.window)
             wm.modal_handler_add(self)
             
-            self.report({'INFO'}, "Started Brush training...")
+            self.report({'INFO'}, f"Started Brush training for {splat_instance.name}...")
             return {'RUNNING_MODAL'}
             
         except Exception as e:
+            splat_instance.is_training = False
             self.report({'ERROR'}, f"Failed to start training: {str(e)}")
             return {'CANCELLED'}
     
-    def build_brush_command(self, props):
+    def build_brush_command(self, props, splat_instance):
         """Build the complete command to run Brush training"""
         cmd = [props.brush_executable]
         
         # Add source path as positional argument
-        if props.source_path:
-            cmd.append(props.source_path)
+        if splat_instance.source_path:
+            cmd.append(splat_instance.source_path)
         
         # Training options
         cmd.extend([
-            "--total-steps", str(props.total_steps),
-            "--ssim-weight", str(props.ssim_weight),
-            "--lr-mean", str(props.lr_mean),
-            "--lr-mean-end", str(props.lr_mean_end),
-            "--lr-coeffs-dc", str(props.lr_coeffs_dc),
-            "--lr-opac", str(props.lr_opac),
-            "--lr-scale", str(props.lr_scale),
-            "--lr-rotation", str(props.lr_rotation)
+            "--total-steps", str(splat_instance.total_steps),
+            "--ssim-weight", str(splat_instance.ssim_weight),
+            "--lr-mean", str(splat_instance.lr_mean),
+            "--lr-mean-end", str(splat_instance.lr_mean_end),
+            "--lr-coeffs-dc", str(splat_instance.lr_coeffs_dc),
+            "--lr-opac", str(splat_instance.lr_opac),
+            "--lr-scale", str(splat_instance.lr_scale),
+            "--lr-rotation", str(splat_instance.lr_rotation)
         ])
         
         # Dataset options
         cmd.extend([
-            "--max-resolution", str(props.max_resolution),
-            "--subsample-frames", str(props.subsample_frames),
-            "--subsample-points", str(props.subsample_points)
+            "--max-resolution", str(splat_instance.max_resolution),
+            "--subsample-frames", str(splat_instance.subsample_frames),
+            "--subsample-points", str(splat_instance.subsample_points)
         ])
         
-        if props.max_frames > 0:
-            cmd.extend(["--max-frames", str(props.max_frames)])
+        if splat_instance.max_frames > 0:
+            cmd.extend(["--max-frames", str(splat_instance.max_frames)])
         
-        if props.eval_split_every > 0:
-            cmd.extend(["--eval-split-every", str(props.eval_split_every)])
+        if splat_instance.eval_split_every > 0:
+            cmd.extend(["--eval-split-every", str(splat_instance.eval_split_every)])
         
         # Refine options
         cmd.extend([
-            "--refine-every", str(props.refine_every),
-            "--growth-grad-threshold", str(props.growth_grad_threshold),
-            "--growth-select-fraction", str(props.growth_select_fraction),
-            "--growth-stop-iter", str(props.growth_stop_iter),
-            "--max-splats", str(props.max_splats)
+            "--refine-every", str(splat_instance.refine_every),
+            "--growth-grad-threshold", str(splat_instance.growth_grad_threshold),
+            "--growth-select-fraction", str(splat_instance.growth_select_fraction),
+            "--growth-stop-iter", str(splat_instance.growth_stop_iter),
+            "--max-splats", str(splat_instance.max_splats)
         ])
         
         # Model options
         cmd.extend([
-            "--sh-degree", str(props.sh_degree)
+            "--sh-degree", str(splat_instance.sh_degree)
         ])
         
         # Process options
         cmd.extend([
-            "--eval-every", str(props.eval_every),
-            "--export-every", str(props.export_every),
-            "--seed", str(props.seed)
+            "--eval-every", str(splat_instance.eval_every),
+            "--export-every", str(splat_instance.export_every),
+            "--seed", str(splat_instance.seed)
         ])
         
-        if props.start_iter > 0:
-            cmd.extend(["--start-iter", str(props.start_iter)])
+        if splat_instance.start_iter > 0:
+            cmd.extend(["--start-iter", str(splat_instance.start_iter)])
         
         # Optional flags
-        if props.with_viewer:
+        if splat_instance.with_viewer:
             cmd.append("--with-viewer")
         
-        if props.eval_save_to_disk:
+        if splat_instance.eval_save_to_disk:
             cmd.append("--eval-save-to-disk")
         
         # Export settings
-        if props.export_path:
-            cmd.extend(["--export-path", props.export_path])
+        if splat_instance.export_path:
+            cmd.extend(["--export-path", splat_instance.export_path])
         
-        if props.export_name != "export_{iter}.ply":
-            cmd.extend(["--export-name", props.export_name])
+        if splat_instance.export_name != "export_{iter}.ply":
+            cmd.extend(["--export-name", splat_instance.export_name])
         
         return cmd
     
-    def run_training(self, command, props):
+    def run_training(self, command, splat_instance):
         """Run the training process"""
         try:
             # Run the command
@@ -514,18 +636,18 @@ class SKY_SPLAT_OT_run_brush_training(Operator):
             # Read output line by line
             for line in self._process.stdout:
                 self._output_lines.append(line.strip())
-                print(f"Brush: {line.strip()}")  # Print to console
+                print(f"Brush ({splat_instance.name}): {line.strip()}")  # Print to console
             
             # Wait for process to complete
             self._process.wait()
             
             if self._process.returncode == 0:
-                print("Brush training completed successfully!")
+                print(f"Brush training completed successfully for {splat_instance.name}!")
             else:
-                print(f"Brush training failed with code: {self._process.returncode}")
+                print(f"Brush training failed for {splat_instance.name} with code: {self._process.returncode}")
             
         except Exception as e:
-            print(f"Error running Brush: {str(e)}")
+            print(f"Error running Brush for {splat_instance.name}: {str(e)}")
         finally:
             self._finished = True
 
@@ -541,83 +663,116 @@ class SKY_SPLAT_PT_gaussian_splatting_panel(Panel):
         layout = self.layout
         props = context.scene.skysplat_brush_props
         
-        # Brush executable
+        # Brush executable (shared)
         box = layout.box()
         box.label(text="Brush Settings")
         box.prop(props, "brush_executable")
         
-        # Path settings
+        # Splat instance management
         box = layout.box()
-        box.label(text="Input/Output Paths")
+        box.label(text="Splat Instances", icon='OUTLINER_OB_POINTCLOUD')
         
         row = box.row()
-        row.prop(props, "source_path")
-        row.operator("skysplat.sync_brush_with_colmap", icon='LINKED', text="")
+        row.template_list("UI_UL_list", "splat_instances", props, "splat_instances", 
+                         props, "active_splat_index", rows=3)
         
-        box.prop(props, "export_path")
-        box.prop(props, "export_name")
+        col = row.column(align=True)
+        col.operator("skysplat.add_splat_instance", icon='ADD', text="")
+        col.operator("skysplat.remove_splat_instance", icon='REMOVE', text="")
         
-        # Basic training parameters
-        box = layout.box()
-        box.label(text="Basic Training Parameters")
-        box.prop(props, "total_steps")
-        box.prop(props, "max_resolution")
-        box.prop(props, "with_viewer")
-        
-        # Dataset options
-        box = layout.box()
-        box.label(text="Dataset Options")
-        box.prop(props, "max_frames")
-        box.prop(props, "subsample_frames")
-        box.prop(props, "subsample_points")
-        box.prop(props, "eval_split_every")
-        
-        # Export settings
-        box = layout.box()
-        box.label(text="Export Settings")
-        box.prop(props, "export_every")
-        box.prop(props, "eval_every")
-        box.prop(props, "eval_save_to_disk")
-        box.prop(props, "start_iter")
-        
-        # Advanced options toggle
-        box = layout.box()
-        box.prop(props, "show_advanced", icon='TRIA_DOWN' if props.show_advanced else 'TRIA_RIGHT')
-        
-        if props.show_advanced:
-            # Advanced training parameters
-            sub_box = box.box()
-            sub_box.label(text="Advanced Training")
-            sub_box.prop(props, "ssim_weight")
-            sub_box.prop(props, "seed")
-            sub_box.prop(props, "sh_degree")
+        # Show active splat instance settings
+        if len(props.splat_instances) > 0 and props.active_splat_index < len(props.splat_instances):
+            splat_instance = props.splat_instances[props.active_splat_index]
             
-            # Learning rates toggle
-            sub_box.prop(props, "show_learning_rates", icon='TRIA_DOWN' if props.show_learning_rates else 'TRIA_RIGHT')
-            if props.show_learning_rates:
-                lr_box = sub_box.box()
-                lr_box.label(text="Learning Rates")
-                lr_box.prop(props, "lr_mean")
-                lr_box.prop(props, "lr_mean_end")
-                lr_box.prop(props, "lr_coeffs_dc")
-                lr_box.prop(props, "lr_opac")
-                lr_box.prop(props, "lr_scale")
-                lr_box.prop(props, "lr_rotation")
+            # Instance name
+            box.prop(splat_instance, "name")
             
-            # Refinement parameters
-            sub_box = box.box()
-            sub_box.label(text="Refinement")
-            sub_box.prop(props, "refine_every")
-            sub_box.prop(props, "growth_grad_threshold")
-            sub_box.prop(props, "growth_select_fraction")
-            sub_box.prop(props, "growth_stop_iter")
-            sub_box.prop(props, "max_splats")
-        
-        # Run button
-        layout.separator()
-        op = layout.operator("skysplat.run_brush_training", icon='PLAY', text="Run Brush Training")
-        if not SKY_SPLAT_OT_run_brush_training.poll(context):
-            layout.label(text="Configure paths to enable training", icon='ERROR')
+            # Path settings
+            box = layout.box()
+            box.label(text="Input/Output Paths")
+            
+            row = box.row()
+            row.prop(splat_instance, "source_path")
+            row.operator("skysplat.sync_brush_with_colmap", icon='LINKED', text="")
+            
+            box.prop(splat_instance, "export_path")
+            box.prop(splat_instance, "export_name")
+            
+            # Basic training parameters
+            box = layout.box()
+            box.label(text="Basic Training Parameters")
+            box.prop(splat_instance, "total_steps")
+            box.prop(splat_instance, "max_resolution")
+            box.prop(splat_instance, "with_viewer")
+            
+            # Dataset options
+            box = layout.box()
+            box.label(text="Dataset Options")
+            box.prop(splat_instance, "max_frames")
+            box.prop(splat_instance, "subsample_frames")
+            box.prop(splat_instance, "subsample_points")
+            box.prop(splat_instance, "eval_split_every")
+            
+            # Export settings
+            box = layout.box()
+            box.label(text="Export Settings")
+            box.prop(splat_instance, "export_every")
+            box.prop(splat_instance, "eval_every")
+            box.prop(splat_instance, "eval_save_to_disk")
+            box.prop(splat_instance, "start_iter")
+            
+            # Advanced options toggle
+            box = layout.box()
+            box.prop(props, "show_advanced", icon='TRIA_DOWN' if props.show_advanced else 'TRIA_RIGHT')
+            
+            if props.show_advanced:
+                # Advanced training parameters
+                sub_box = box.box()
+                sub_box.label(text="Advanced Training")
+                sub_box.prop(splat_instance, "ssim_weight")
+                sub_box.prop(splat_instance, "seed")
+                sub_box.prop(splat_instance, "sh_degree")
+                
+                # Learning rates toggle
+                sub_box.prop(props, "show_learning_rates", icon='TRIA_DOWN' if props.show_learning_rates else 'TRIA_RIGHT')
+                if props.show_learning_rates:
+                    lr_box = sub_box.box()
+                    lr_box.label(text="Learning Rates")
+                    lr_box.prop(splat_instance, "lr_mean")
+                    lr_box.prop(splat_instance, "lr_mean_end")
+                    lr_box.prop(splat_instance, "lr_coeffs_dc")
+                    lr_box.prop(splat_instance, "lr_opac")
+                    lr_box.prop(splat_instance, "lr_scale")
+                    lr_box.prop(splat_instance, "lr_rotation")
+                
+                # Refinement parameters
+                sub_box = box.box()
+                sub_box.label(text="Refinement")
+                sub_box.prop(splat_instance, "refine_every")
+                sub_box.prop(splat_instance, "growth_grad_threshold")
+                sub_box.prop(splat_instance, "growth_select_fraction")
+                sub_box.prop(splat_instance, "growth_stop_iter")
+                sub_box.prop(splat_instance, "max_splats")
+            
+            # Run button
+            layout.separator()
+            row = layout.row()
+            if splat_instance.is_training:
+                row.label(text="Training in progress...", icon='TIME')
+            else:
+                row.operator("skysplat.run_brush_training", icon='PLAY', text="Run Brush Training")
+                if splat_instance.training_completed:
+                    row.label(text="✓ Completed", icon='CHECKMARK')
+            
+            if not SKY_SPLAT_OT_run_brush_training.poll(context):
+                layout.label(text="Configure paths to enable training", icon='ERROR')
+            
+            # Info about multiple instances
+            box = layout.box()
+            box.label(text="💡 Tip: You can train multiple splats", icon='INFO')
+            box.label(text="from different COLMAP models simultaneously")
+        else:
+            box.label(text="Add a splat instance to begin", icon='INFO')
         
         # Version indicator
         row = layout.row()
@@ -626,8 +781,24 @@ class SKY_SPLAT_PT_gaussian_splatting_panel(Panel):
 
 # Registration
 classes = (
+    SplatInstance,
     SkySplatBrushProperties,
+    SKY_SPLAT_OT_add_splat_instance,
+    SKY_SPLAT_OT_remove_splat_instance,
     SKY_SPLAT_OT_sync_brush_with_colmap,
     SKY_SPLAT_OT_run_brush_training,
-    SKY_SPLAT_PT_gaussian_splatting_panel,  # Change this line
+    SKY_SPLAT_PT_gaussian_splatting_panel,
 )
+
+def register():
+    for cls in classes:
+        bpy.utils.register_class(cls)
+    bpy.types.Scene.skysplat_brush_props = bpy.props.PointerProperty(type=SkySplatBrushProperties)
+
+def unregister():
+    for cls in reversed(classes):
+        bpy.utils.unregister_class(cls)
+    del bpy.types.Scene.skysplat_brush_props
+
+if __name__ == "__main__":
+    register()
