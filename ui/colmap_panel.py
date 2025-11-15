@@ -845,18 +845,31 @@ class SKY_SPLAT_OT_prepare_brush_dataset(bpy.types.Operator):
             # Auto-update the Gaussian Splatting panel if it exists
             if hasattr(context.scene, 'skysplat_brush_props'):
                 brush_props = context.scene.skysplat_brush_props
-                # Try to find or create a matching splat instance
-                if len(brush_props.splat_instances) == 0:
+                # Try to find a matching splat instance by name
+                expected_name = f"Splat_{colmap_instance.name}"
+                splat_instance = None
+                splat_index = -1
+
+                for i, instance in enumerate(brush_props.splat_instances):
+                    if instance.name == expected_name:
+                        splat_instance = instance
+                        splat_index = i
+                        break
+
+                # If not found, create a new one
+                if splat_instance is None:
                     splat_instance = brush_props.splat_instances.add()
-                    splat_instance.name = f"Splat_{colmap_instance.name}"
-                    brush_props.active_splat_index = 0
+                    splat_instance.name = expected_name
+                    splat_index = len(brush_props.splat_instances) - 1
+                    self.report({'INFO'}, f"Created new splat instance: {expected_name}")
                 else:
-                    splat_instance = brush_props.splat_instances[brush_props.active_splat_index]
-                
+                    self.report({'INFO'}, f"Updated existing splat instance: {expected_name}")
+
+                # Set as active and update paths
+                brush_props.active_splat_index = splat_index
                 splat_instance.source_path = brush_dataset_dir
                 if not splat_instance.export_path:
                     splat_instance.export_path = os.path.join(parent_dir, "brush_output")
-                self.report({'INFO'}, "Updated Brush panel with dataset path")
             
             return {'FINISHED'}
             
