@@ -1336,19 +1336,43 @@ class SKY_SPLAT_OT_create_camera_animation(bpy.types.Operator):
             context.scene.frame_start = min(sorted_frames)
             context.scene.frame_end = max(sorted_frames)
 
-            # Create keyframes for each frame
+            # Set camera to use quaternion rotation mode to avoid gimbal lock
+            animated_cam.rotation_mode = 'QUATERNION'
+
+            # Extract all rotations and locations first
+            locations = []
+            quaternions = []
+
             for frame_num in sorted_frames:
                 colmap_cam = frame_camera_map[frame_num]
 
+                # Decompose the matrix to get location and rotation
+                loc, rot_quat, scale = colmap_cam.matrix_world.decompose()
+
+                locations.append(loc)
+                quaternions.append(rot_quat)
+
+            # Ensure quaternion continuity by making sure each quaternion is in the same hemisphere
+            # as the previous one (avoiding 180-degree flips)
+            for i in range(1, len(quaternions)):
+                # Check if we need to flip the quaternion to maintain continuity
+                # q and -q represent the same rotation, so we pick the one closer to the previous
+                dot_product = quaternions[i].dot(quaternions[i-1])
+                if dot_product < 0:
+                    # Flip the quaternion to maintain continuity
+                    quaternions[i].negate()
+
+            # Create keyframes for each frame
+            for i, frame_num in enumerate(sorted_frames):
                 # Set the current frame
                 context.scene.frame_set(frame_num)
 
-                # Copy the transform from COLMAP camera
-                animated_cam.matrix_world = colmap_cam.matrix_world.copy()
+                # Set location and rotation
+                animated_cam.location = locations[i]
+                animated_cam.rotation_quaternion = quaternions[i]
 
                 # Insert keyframes for location and rotation
                 animated_cam.keyframe_insert(data_path="location", frame=frame_num)
-                animated_cam.keyframe_insert(data_path="rotation_euler", frame=frame_num)
                 animated_cam.keyframe_insert(data_path="rotation_quaternion", frame=frame_num)
 
             # Set the animated camera as the active camera
