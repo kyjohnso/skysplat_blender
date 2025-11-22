@@ -178,18 +178,19 @@ class SKY_SPLAT_OT_add_video_instance(bpy.types.Operator):
     bl_description = "Add a new video instance"
 
     def execute(self, context):
-        # In Blender 5.0+, ensure sequencer scene exists before creating video instances
-        has_sequencer_scene_support = hasattr(context, 'sequencer_scene') or hasattr(context.workspace, 'sequencer_scene')
+        # In Blender 5.0+, select the default scene for the video sequencer if not already set
+        has_sequencer_scene_support = hasattr(context.workspace, 'sequencer_scene')
 
         if has_sequencer_scene_support:
-            # Check if a sequencer scene exists
-            has_sequencer_scene = (hasattr(context, 'sequencer_scene') and context.sequencer_scene) or \
-                                 (hasattr(context.workspace, 'sequencer_scene') and context.workspace.sequencer_scene)
+            # Check if a sequencer scene is already selected
+            if not context.workspace.sequencer_scene:
+                # Select the current scene for the video sequencer
+                context.workspace.sequencer_scene = context.scene
+                self.report({'INFO'}, f"Selected scene '{context.scene.name}' for video sequencer")
 
-            if not has_sequencer_scene:
-                # Create sequencer scene first
-                self.report({'INFO'}, "Creating sequencer scene for video editing")
-                bpy.ops.scene.new_sequencer_scene(type='NEW')
+            # Ensure the sequencer scene has a sequence editor
+            if context.workspace.sequencer_scene and not context.workspace.sequencer_scene.sequence_editor:
+                context.workspace.sequencer_scene.sequence_editor_create()
 
         # Now add the video instance (props will be from window scene)
         props = get_skysplat_props(context)
@@ -262,6 +263,7 @@ class SKY_SPLAT_OT_load_video(bpy.types.Operator):
                 # After creating, get the newly created sequencer scene
                 if hasattr(context, 'sequencer_scene') and context.sequencer_scene:
                     target_scene = context.sequencer_scene
+                    context.workspace.sequencer_scene = context.sequencer_scene
                 elif hasattr(context.workspace, 'sequencer_scene') and context.workspace.sequencer_scene:
                     target_scene = context.workspace.sequencer_scene
                 else:
