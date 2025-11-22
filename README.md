@@ -1,45 +1,92 @@
-<img src="images/skysplat_logo1.png" width="300" alt="Description">
+<img src="images/skysplat_logo1.png" width="300" alt="SkySplat Logo">
 
 # SkySplat: 3DGS Blender Toolkit
 
-SkySplat is a Blender addon that simplifies the workflow for creating 3D Gaussian Splats from drone footage. It provides a comprehensive set of tools to streamline the process from video import to frame extraction, and loose integration of Blender with COLMAP and Arthur Brussee's rust based [Brush App](https://github.com/ArthurBrussee/brush) (pre-compiled binaries included).
-![pumproom_7000_5](images/pumproom_7000_5.png)
+SkySplat is a comprehensive Blender addon that streamlines the complete workflow for creating 3D Gaussian Splats from drone footage. **Now with full multi-instance support and Blender 5.0 compatibility**, SkySplat provides a seamless pipeline from video import through frame extraction, COLMAP reconstruction, model transformation, camera animation, and Gaussian Splatting training - all within Blender.
 
-## Features
+**✨ New in Version 0.4.0: Multi-Instance Workflow**
 
-- **Video Import & Management**
-  - Load drone videos directly into Blender
-  - Automatic detection and loading of SRT metadata files
-  - Smart path management for project organization
+In version 0.3.0 and earlier, if you wanted to process different scenes in the same blend file you had to manually rename, move, and sort through the automatically created files. Now in v0.4.0 you can process multiple videos in the same .blend file without any file collisions! Each panel (Video, COLMAP, Brush) now supports multiple independent instances, allowing you to:
+- Load and extract frames from multiple drone videos
+- Run COLMAP processing on different datasets
+- Transform and export multiple COLMAP models independently
+- Train multiple Gaussian Splat models
 
-  ![video_import](images/silo_video_import.png)
+All with automatic path management ensuring no conflicts between projects.
 
-- **Automatic Frame Extraction**
-  - Extract frames with customizable parameters (start, end, step)
-  - Automatic output folder creation based on video filename
-  - Optimized for aerial footage processing
+<img src="images/pumproom_7000_5.png" width="700" alt="Pumproom 3D Gaussian Splat">
 
-  ![frame_extraction](images/silo_frame_capture.png)
+## Key Features
 
-- **COLMAP Integration**
-  - A loose integration between COLMAP and Blender, arrange files and launch COLMAP
-  - Path synchronization between video processing and reconstruction
+### 🎬 Multi-Instance Video Management
+- **Load multiple videos** with independent settings and frame extraction parameters
+- **Video instances** maintain separate paths and configurations
+- Automatic detection and loading of SRT metadata files per video
+- Smart path management prevents file collisions between projects
 
-  ![colmap_and_blender](images/silo_colmap_and_blender.png)
+<img src="images/video_panel_multi_instance.png" width="400" alt="Video Panel Multi-Instance">
 
-- **Gaussian Splatting Integration**
-  - A loose integration of the [Brush App](https://github.com/ArthurBrussee/brush) for gaussian splatting training.
-  - Configuration of gaussian-splatting training from Blender
-  - Running of gaussian-splatting in a subprocess
+### 📸 Flexible Frame Extraction
+- Extract frames from multiple videos with customizable parameters (start, end, step)
+- Automatic output folder creation based on video filename
+- Independent frame extraction settings per video instance
+- Optimized for aerial footage processing
 
-  <!-- ![gaussian_splatting](images/silo_colmap_and_3dgs_6.png) -->
-  ![puente_nuevo](images/puente_nuevo_bridge.png)
+<img src="images/video_panel_frame_extraction.png" width="400" alt="Video Panel Frame Extraction">
+
+### 🎯 Multi-Instance COLMAP Integration
+- **Multiple COLMAP instances** - process different datasets
+- Each instance maintains independent input/output paths
+- No file conflicts when processing multiple reconstructions
+- Path synchronization between video processing and reconstruction
+- Support for both sequential and exhaustive matching
+
+<img src="images/colmap_panel_settings_and_processing.png" width="400" alt="COLMAP Panel Settings">
+
+### 🔄 COLMAP Model Transformation
+- Load COLMAP sparse reconstructions directly into Blender
+- Scale, rotate, and translate models in Blender's 3D environment
+- Export transformed models for Gaussian Splatting training
+- Multiple COLMAP instances can be transformed independently
+- Natural coordinate system alignment for better results
+
+<img src="images/colmap_panel_transformation_and_dataset.png" width="400" alt="COLMAP Transformation Panel">
+
+### 🎥 **NEW: Animated Camera Creation**
+- **Automatically create animated cameras** from COLMAP camera positions
+- Camera keyframes aligned to each reconstructed frame
+- Smooth quaternion-based rotation interpolation (no gimbal lock!)
+- Automatic camera resolution matching from COLMAP data
+- Perfect for creating flythrough animations or previewing reconstructions
+
+<img src="images/colmap_panel_camera_animation.png" width="400" alt="Camera Animation Panel">
+
+<img src="images/animated_camera_perspective.gif" width="500" alt="Camera Animation - Camera View">
+
+*Camera animation from COLMAP reconstruction - camera view*
+
+<img src="images/animated_camera_outside_perspective.gif" width="500" alt="Camera Animation - Outside View">
+
+*Camera animation from COLMAP reconstruction - outside perspective*
+
+### 🌟 Multi-Instance Gaussian Splatting (Brush)
+- **Multiple splat instances** - train different models
+- Integration with Arthur Brussee's [Brush App](https://github.com/ArthurBrussee/brush)
+- Pre-compiled binaries available for all platforms
+- Independent training parameters per splat instance
+- Brush dataset preparation with automatic path linking
+- Real-time training viewer option
+- No file conflicts between training sessions
+
+<img src="images/brush_panel_instances.png" width="400" alt="Brush Panel Instances">
+</br>
+<img src="images/brush_panel_training_parameters.png" width="400" alt="Brush Training Parameters">
 
 ## Requirements
 
-- Blender 4.0.0 or newer
+- **Blender 5.0.0 or newer** (also compatible with Blender 4.0+)
 - COLMAP (for reconstruction features)
-- [Brush App](https://github.com/ArthurBrussee/brush) from Arthur Brussee.
+- [Brush App](https://github.com/ArthurBrussee/brush) - bundled with addon
 
 **Note**: The [Brush App](https://github.com/ArthurBrussee/brush) for Gaussian Splatting is now bundled with the addon - no separate installation required!
 
@@ -47,12 +94,12 @@ SkySplat is a Blender addon that simplifies the workflow for creating 3D Gaussia
 
 ### 1. Download and Install SkySplat
 1. Download the latest release zip file from [SkySplat Releases](https://github.com/kyjohnso/skysplat_blender/releases/latest)
-   
+
    **OR**
-   
+
    Download the latest development version via the GitHub Download ZIP link under the code button at [skysplat_blender](https://github.com/kyjohnso/skysplat_blender)
 
-   <img src="images/download_zip.png" width="400" alt="Description">
+   <img src="images/download_zip.png" width="400" alt="Download ZIP">
 
 2. Open Blender and navigate to Edit → Preferences → Add-ons
 3. Click "Install..." and select the downloaded ZIP file
@@ -97,7 +144,7 @@ The executable will typically be installed to `/usr/bin/colmap`.
 
 ### 3. Install Brush app
 
-The brush app from [brush app](https://github.com/ArthurBrussee/brush#) is needed for the 3DGS training of the scene. The brush binaries for all mac/linux/windows are included with this addon, however, when Blender installs an addon via a zip file, it changes the permissions on the extracted files (this is for everyone's benefit), and these cannot be executed by default. 
+The brush app from [brush app](https://github.com/ArthurBrussee/brush) is needed for the 3DGS training of the scene. The brush binaries for all mac/linux/windows are included with this addon, however, when Blender installs an addon via a zip file, it changes the permissions on the extracted files (this is for everyone's benefit), and these cannot be executed by default.
 
 You have 3 options for running brush from this addon:
 
@@ -108,14 +155,16 @@ After installing the SkySplat addon, you'll need to make the bundled brush binar
 **macOS/Linux:**
 1. Open Terminal
 2. Navigate to your Blender addons directory:
-   - **macOS**: `~/Library/Application Support/Blender/4.0/scripts/addons/skysplat_blender/binaries/`
-   - **Linux**: `~/.config/blender/4.0/scripts/addons/skysplat_blender/binaries/`
+   - **macOS (Blender 5.0)**: `~/Library/Application Support/Blender/5.0/scripts/addons/skysplat_blender/binaries/`
+   - **macOS (Blender 4.0)**: `~/Library/Application Support/Blender/4.0/scripts/addons/skysplat_blender/binaries/`
+   - **Linux (Blender 5.0)**: `~/.config/blender/5.0/scripts/addons/skysplat_blender/binaries/`
+   - **Linux (Blender 4.0)**: `~/.config/blender/4.0/scripts/addons/skysplat_blender/binaries/`
 3. Make the binary executable:
    ```bash
    # For macOS
    chmod +x brush_app_mac
    ```
- 
+
 
    ```bash
    # For Linux
@@ -191,7 +240,7 @@ blender
 
 **Windows:**
 ```cmd
-"C:\Program Files\Blender Foundation\Blender 4.0\blender.exe"
+"C:\Program Files\Blender Foundation\Blender 5.0\blender.exe"
 ```
 
 ### Benefits of CLI Usage
@@ -205,133 +254,148 @@ When running operations like "Run COLMAP" or "Run Brush Training", the detailed 
 
 ---
 
-## Example Workflow Run Through
+## Multi-Instance Workflow Example
 
-1. **Accessing the Toolkit**
-   - Open the sidebar in the 3D View (press N)
-   - Select the "SkySplat" tab
+This example demonstrates the power of SkySplat's multi-instance workflow, allowing you to manage multiple drone videos in the same .blend file without any file collisions.
 
-2. **Loading Drone Footage**
-   - You can download the example video used in this walkthrough at [windsor_silo](https://skysplat.net/DJI_20250731122012_0009_D_windsor_silo_new_small.mp4) (right click and save as) (This is a new video of the silo that tends to work better in COLMAP)
-   - Select your video file in the "Video File" field in the 3D Viewport
-   - If available, the SRT metadata file will be detected automatically
-   - Click "Load Video and SRT" to import into the Video Sequencer
+### 1. Accessing the Toolkit
+- Open the sidebar in the 3D View (press N)
+- Select the "SkySplat" tab
 
-<img src="images/video_loader_panel.png" width="400" alt="Description">
+### 2. Setting Up Multiple Video Instances
+- Click the **"+"** button in the Video Instances section to add a new video instance
+- Repeat for each video you want to process (e.g., Video_1, Video_2)
+- Select the active instance you want to work with
+- Each instance maintains independent settings and file paths
 
-3. **Extracting Frames**
-   - Set your desired frame range and step value, Version 0.3.0 of SkySplat will automatically select the frame step value to get the total number of extracted frames to about 170. Smaller step size means more frames and better reconstruction, but also longer processing times.
-   - Confirm or modify the output folder
-   - Click "Extract Frames" to process
+<img src="images/video_panel_multi_instance.png" width="400" alt="Multiple Video Instances">
 
-4. **COLMAP Workflow**
-   - Configure COLMAP settings in the SkySplat COLMAP panel
-   - COLMAP Executable should auto populate with your systems default path, however you can manually set it if needed (on MacOS this path will be /opt/homebrew/bin/colmap if you used the homebrew as the install method as described above)
-   - If the input and output paths for the models aren't loaded, you can click the chain link icon to auto populate them from the video file path and defaults.
-   - The defaults for the other settings should be sufficient for your first few runs. 
-   - Click "Run COLMAP" to begin processing your video frames into a sparse point cloud (you can monitor the console running blender for detailed colmap output)
+### 3. Loading Videos and Extracting Frames
+For each video instance:
+- You can download the example video used in this walkthrough at [windsor_silo](https://skysplat.net/DJI_20250731122012_0009_D_windsor_silo_new_small.mp4) (right click and save as)
+- Select your video file in the "Video File" field
+- SRT metadata files are detected automatically
+- Click "Load Video and SRT" to import into the Video Sequencer
+- Set frame range and step value (SkySplat auto-calculates optimal frame step)
+- Click "Extract Frames" - output folders are automatically organized by video name
+- **No file collisions**: Each video instance has its own output folder
 
-<img src="images/colmap_panel.png" width="400" alt="Description">
+### 4. Multi-Instance COLMAP Processing
+Switch to the COLMAP panel:
+- Click **"+"** to add COLMAP instances for each video
+- Each COLMAP instance links to a video instance
+- Click the chain link icon to auto-populate paths from video instances
+- Configure COLMAP settings (camera model, matching type, GPU usage)
+- Click "Run COLMAP" for each instance
+- **No file conflicts** between different COLMAP instances
 
-5. **COLMAP Model Transformation**
-   This step was the main reason I came up with this workflow. COLMAP will default the coordinate frame to the frame of the initial camera pose. This means that for many gaussian splatting drone videos, it is slightly tilted down and at the first camera origin, rather than being at a natural center of the scene. The colmap transformation panel lets you load the COLMAP output model, scale, rotate, and translate the parent object in blender to a more natural scale, position, and orientation, and then export the model before gaussian splatting training.
+<img src="images/colmap_panel_settings_and_processing.png" width="400" alt="COLMAP Multi-Instance">
 
-   <img src="images/colmap_transformation_panel.png" width="400" alt="Description">
+### 5. Transform Multiple COLMAP Models
+For each COLMAP instance:
+- Click "Load COLMAP Model" to import the reconstruction
+- Each model loads into its own collection (e.g., COLMAP_Video1, COLMAP_Video2)
+- Transform the "COLMAP_Root" object for each model independently
+- Scale, rotate, and translate to align with your coordinate system
+- Use reference images or models for proper scaling
+- Click "Export Transformed Model" when satisfied
+- **All models coexist in Blender** without interfering with each other
 
+<img src="images/colmap_panel_transformation_and_dataset.png" width="400" alt="COLMAP Transformation">
 
-   - Click "Load COLMAP Model" after running COLMAP and it will load the output COLMAP model into blender. You can also go straight to this step in Blender if you already processed your images outside of SkySplat.
+### 6. Create Animated Cameras
+For each loaded COLMAP model:
+- Click **"Create Camera Animation"** in the Camera Animation section
+- SkySplat automatically:
+  - Parses frame numbers from COLMAP camera names
+  - Creates an animated camera (AnimatedCamera_InstanceName)
+  - Sets camera resolution from COLMAP data
+  - Creates keyframes at each frame with smooth quaternion interpolation
+  - Sets the camera as active
+- **Multiple animated cameras** can coexist, one per COLMAP instance
+- Preview your reconstruction path with smooth motion
 
-   ![loaded COLMAP model](images/rotate_and_scale_colmap_1.png)
+<img src="images/animated_camera_perspective.gif" width="500" alt="Animated Camera from COLMAP">
 
-   - If the loaded COLMAP model looks sparse with few points or few cameras, try running frame extraction again with a smaller step size.
+### 7. Multi-Instance Brush Training
+Switch to the Gaussian Splatting (Brush) panel:
+- Click "Prepare Brush Dataset" for each COLMAP instance
+- This creates properly structured datasets (e.g., brush_dataset_1, brush_dataset_2)
+- Click **"+"** to add Splat instances
+- Each splat instance automatically links to its prepared dataset
+- Configure training parameters independently per instance
+- Click "Run Brush Training" for each splat
+- **No file conflicts** between different training instances
+- Monitor each training session separately
 
-   - To transform this model, make sure you transform the parent "COLMAP_Root" empty object, not individual cameras or points. 
+<img src="images/brush_panel_instances.png" width="400" alt="Brush Multi-Instance">
 
-   ![rotate and scale colmap 0](images/rotate_and_scale_colmap_0.png)
+### 8. Loading 3D Gaussian Splats
+There is already a rich Blender addon ecosystem for loading 3D gaussian splats into Blender. I recommend [KIRI Innovation's 3DGS Render Addon](https://github.com/Kiri-Innovation/3dgs-render-blender-addon).
+- Load each .ply file from the export paths
+- **Multiple splats coexist** in Blender's scene
+- Each splat aligns with its transformed COLMAP model
+- Create renders and animations with multiple splats
 
-   - For the example silo video, I rotated it so the natural ground was in the X-Y plane, and the origin was at the base of the silo. You can also use a google maps or OSM image with a scale so that you can right size the COLMAP and hence 3DGS models. I have included a screen shot of a map from this silo video at [silo reference map](https://skysplat.net/google_earth_reference_silo.png)
+<img src="images/3dgs_model_loaded_1.png" width="600" alt="3DGS Model Loaded">
+<img src="images/3dgs_model_loaded_5.png" width="600" alt="3DGS Model in Scene">
 
-   ![silo reference map](https://skysplat.net/google_earth_reference_silo.png)
+## Benefits of Multi-Instance Workflow
 
-   This is one of the highlights of working with COLMAP and 3DGS in Blender, the ability to include other 3D assets, models, and features in a cohesive 3d environment.
+✅ **Manage multiple videos in one .blend file** - process different scenes without file conflicts
+✅ **No file collisions** - automatic path management per instance
+✅ **Independent settings** - different camera models, frame steps, training parameters
+✅ **Organized projects** - each instance maintains its own folder structure
+✅ **Streamlined workflow** - all models coexist in Blender without interfering
+✅ **Scene management** - switch between different video projects easily
 
-   ![rotate and scale colmap 2](images/rotate_and_scale_colmap_2.png)
+## Single-Instance Workflow
 
-   Now I can export the model scaled and rotated into a more natural coordinate system, and the 3DGS code will start with these parameters when it fits the gaussians. 
-
-   <img src="images/colmap_transformation_panel.png" width="400" alt="Colmap Transformation Panel">
-
-    - Click "Export COLMAP Model" after you have finished transforming and adjusting your model, this will export a new model in the <colmap output directory>/transformed/ directory.
-
-    - Click "Prepare Brush Dataset" to prepare a dataset for training with the Gaussian Splatting Brush. This will arrange your COLMAP model and images into a directory that brush can import.
-   
-
-6. **Brush Training (3D Gaussian Splatting)**
-
-<img src="images/3dgs_brush_app_panel.png" width="400" alt="Description">
-
-   - Configure Brush settings in the SkySplat 3DGS panel (as shown in the image below)
-   - The Brush Executable path will auto-populate with the bundled binary for your platform (Windows, macOS, or Linux)
-   - Use the chain link icon next to the Source Path to automatically sync with your COLMAP output
-   - The Source Path should point to your transformed COLMAP model or prepared brush dataset
-   - Set your Export Path where the trained .ply files will be saved
-   - Configure training parameters:
-     - **Total Steps**: Number of training iterations (default: 30000)
-     - **Max Resolution**: Maximum image resolution for training (default: 1920)
-     - **With Viewer**: Enable this to pop up the interactive viewer application that shows real-time training progress
-   - If you want to watch the brush app training live you can click the "viewer" button. This will run brush with the UI and show the 3DGS model as it is trained.
-   - Advanced options are available by expanding the "Show Advanced Options" section for fine-tuning learning rates, refinement parameters, and dataset options
-   - Click "Run Brush Training" to start the process
-   - Unlike the original Gaussian Splatting implementation, Brush runs as a subprocess so it won't block the Blender UI
-   - Monitor progress in the Blender console, or if you enabled "With Viewer", watch the training progress in the dedicated viewer window
-   - The training process will automatically export .ply files at specified intervals to your Export Path
-
-![brush training 1](images/brush_training_1.png)
-
-
-7. **3DGS Loading**
-   There is already a rich Blender addon ecosystem for loading 3D gaussian splats into Blender. I recommend [KIRI Innovation's 3DGS Render Addon](https://github.com/Kiri-Innovation/3dgs-render-blender-addon) and you can see it in my Blender screen shots above if you look closely. I recommend loading the ply file without transforming from COLMAP to Blender coordinates mainly because we already did a transformation and scaling in the previous step. If everything worked you will now have your transformed COLMAP model, any helper "reference silos" you created in blender, and the 3D Gaussian Splat ready to create whatever awesome render or animation you are working on. 
-
-![silo_colmap_and_3dgs_1](images/3dgs_model_loaded_1.png)
-![silo_colmap_and_3dgs_2](images/3dgs_model_loaded_2.png)
-![silo_colmap_and_3dgs_3](images/3dgs_model_loaded_3.png)
-![silo_colmap_and_3dgs_4](images/3dgs_model_loaded_4.png)
-![silo_colmap_and_3dgs_5](images/3dgs_model_loaded_5.png)
+Of course, you can still use SkySplat for single video workflows! The multi-instance system is optional - simply use one instance per panel for a streamlined single-video experience, just like previous versions.
 
 ## Contributing
 
-The best thing someone can do is try this workflow with their own drone videos and please tell me about your experience. This is the very first iteration of this and I know with an engaged open source community we can create some amazing splats, renders, experiences and art.
+The best thing someone can do is try this workflow with their own drone videos and please tell me about your experience. This is the very first iteration of multi-instance support and I know with an engaged open source community we can create some amazing splats, renders, experiences and art.
 
-![school5.png](images/school5.png)
+<img src="images/school5.png" width="600" alt="School Scene">
 
-I did this development on Linux and while I tried (or more acurately Claude tried) to make sure it is platform agnostic, I would love if people wanted to try this out on Windows or MacOS and could provide feedback or contribute to the project. 
+This development has been tested on macOS (Apple Silicon) with Blender 5.0, but the code is designed to be platform-agnostic. I would love if people wanted to try this out on Windows or Linux and could provide feedback or contribute to the project.
 
-I also have many comments above to the effect of *"future versions will include..."*, and *"I still need to work on..."* etc.
-
-If you have any ideas for further features, or bug reports, or want to help work on documentation, please feel free to fork the code and send a pull request or reach out.
+If you have any ideas for further features, bug reports, or want to help work on documentation, please feel free to fork the code and send a pull request or reach out.
 
 ## License
 
-SkySplat_blender is licensed under the MIT License. A single file was forked from [COLMAP](https://colmap.github.io/) (utils/read_write_model.py) and it retains the original copyright. 
+SkySplat_blender is licensed under the MIT License. A single file was forked from [COLMAP](https://colmap.github.io/) (utils/read_write_model.py) and it retains the original copyright.
 
 Brush is built separately and no code is included in SkySplat. Also, it is licensed under Apache v2, and this license should be adhered to.
 
 None of the code from [Gaussian Splatting](https://github.com/graphdeco-inria/gaussian-splatting) is included in this repo, however, if you use it all of its copyright and license conditions should be adhered to.
 
+## Version History
+
+**Version 0.4.0** (Current)
+- ✅ **Multi-instance support** for Video, COLMAP, and Brush panels
+- ✅ **Animated camera creation** from COLMAP cameras with smooth quaternion interpolation
+- ✅ **Blender 5.0 compatibility** (also works with Blender 4.0+)
+- ✅ **No file collisions** - independent path management per instance
+- ✅ **Organized workflow** - manage multiple projects in one .blend file
+
+**Version 0.3.0**
+- ✅ Packaged Brush app binaries with the addon
+- ✅ Automatic frame step calculation for optimal frame extraction
 
 ## Future Work
 
-1. ✅ ~~Package the brush app with the blender addon~~ **COMPLETED!** - Brush binaries are now bundled for all platforms
-2. Integration of SRT metadata for improved COLMAP initialization
-3. Enhanced UI for batch processing multiple videos
-4. Direct integration with more 3D Gaussian Splatting viewers
+1. Integration of SRT metadata for improved COLMAP initialization
+2. Batch processing UI enhancements
+3. Direct integration with more 3D Gaussian Splatting viewers
+4. Enhanced multi-instance monitoring and progress tracking
 
-![pumproom_brush_5000](images/pumproom_brush_50000.png)
+<img src="images/pumproom_brush_50000.png" width="600" alt="Pumproom Brush Training Result">
 
 ## Acknowledgments
 
 Without these open source (or source available in one case) projects, I would have nothing in this project. If you find this workflow useful, please consider giving these projects a star or following them on GitHub to stay updated with their development.
-
 
 - [Blender](https://www.blender.org/)
 - [COLMAP](https://colmap.github.io/)
@@ -344,7 +408,9 @@ Happy Splatting!🎨
 
 Kyjohnso
 
-![lighthouse_rendered1.png](images/lighthouse_rendered1.png)
+<img src="images/lighthouse_rendered1.png" width="600" alt="Lighthouse Render">
+
+---
 
 ### Legacy - Install GraphDeco-INRIA's [gaussian-splatting](https://github.com/graphdeco-inria/gaussian-splatting) python package
 
@@ -387,7 +453,7 @@ The original SkySplat addon used the GraphDeco-INRIA's gaussian-splatting softwa
    else:
       print("CUDA is not available. Check your installation.")
    ```
-   
+
    Note: I have occasionally had problems with creating a venv, activating it, and then the python command pointing to a different version of python. Depending on your version of python and how you setup your environment, you may need to adjust how you call this file that you just created. For instance, I called the above file with the command:
    ```
    python3.11 verify_cuda_torch.py
