@@ -32,6 +32,7 @@ from .ui.colmap_panel import (
     SKY_SPLAT_OT_sync_with_video,
     SKY_SPLAT_OT_load_colmap_model,
     SKY_SPLAT_OT_export_colmap_model,
+    SKY_SPLAT_OT_create_camera_animation,
     SKY_SPLAT_OT_prepare_brush_dataset,
 )
 
@@ -65,6 +66,7 @@ classes = (
     SKY_SPLAT_OT_sync_with_video,
     SKY_SPLAT_OT_load_colmap_model,
     SKY_SPLAT_OT_export_colmap_model,
+    SKY_SPLAT_OT_create_camera_animation,
     SKY_SPLAT_OT_prepare_brush_dataset,
     # Gaussian Splatting panel
     SplatInstance,

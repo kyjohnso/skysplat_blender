@@ -9,6 +9,7 @@ import platform
 import sys
 import json
 import time
+import re
 
 import numpy as np
 import mathutils
@@ -1213,6 +1214,179 @@ class SKY_SPLAT_OT_export_colmap_model(bpy.types.Operator):
             return {'CANCELLED'}
 
 
+class SKY_SPLAT_OT_create_camera_animation(bpy.types.Operator):
+    bl_idname = "skysplat.create_camera_animation"
+    bl_label = "Create Camera Animation"
+    bl_description = "Create or update a camera with keyframes aligned to COLMAP cameras"
+
+    @classmethod
+    def poll(cls, context):
+        props = context.scene.skysplat_colmap_props
+        if len(props.colmap_instances) == 0:
+            return False
+
+        colmap_instance = props.colmap_instances[props.active_colmap_index]
+
+        # Check if COLMAP cameras exist in the scene for this instance
+        for obj in bpy.data.objects:
+            if 'colmap_image_id' in obj and 'colmap_instance_name' in obj:
+                if obj['colmap_instance_name'] == colmap_instance.name:
+                    return True
+        return False
+
+    def execute(self, context):
+        props = context.scene.skysplat_colmap_props
+        colmap_instance = props.colmap_instances[props.active_colmap_index]
+
+        try:
+            # Find all COLMAP cameras for this instance
+            colmap_cameras = []
+            for obj in bpy.data.objects:
+                if 'colmap_image_id' in obj and 'colmap_instance_name' in obj:
+                    if obj['colmap_instance_name'] == colmap_instance.name:
+                        colmap_cameras.append(obj)
+
+            if not colmap_cameras:
+                self.report({'ERROR'}, "No COLMAP cameras found for this instance")
+                return {'CANCELLED'}
+
+            # Parse frame numbers from camera names
+            frame_camera_map = {}
+            for cam_obj in colmap_cameras:
+                # Get the camera name (e.g., "Camera_frame_00001" or "Camera_frame_00001.001")
+                cam_name = cam_obj.name
+
+                # Extract the frame number
+                # Look for pattern like "frame_00001" or just the numeric part
+                # Try to find frame_XXXXX pattern first
+                match = re.search(r'frame[_-]?(\d+)', cam_name, re.IGNORECASE)
+                if match:
+                    frame_num = int(match.group(1))
+                else:
+                    # Try to find just a number sequence
+                    match = re.search(r'(\d{4,})', cam_name)
+                    if match:
+                        frame_num = int(match.group(1))
+                    else:
+                        logger.warning(f"Could not parse frame number from camera name: {cam_name}")
+                        continue
+
+                frame_camera_map[frame_num] = cam_obj
+
+            if not frame_camera_map:
+                self.report({'ERROR'}, "Could not parse frame numbers from camera names")
+                return {'CANCELLED'}
+
+            # Get or create animated camera
+            animated_cam_name = f"AnimatedCamera_{colmap_instance.name}"
+
+            if animated_cam_name in bpy.data.objects:
+                animated_cam = bpy.data.objects[animated_cam_name]
+            else:
+                # Create new camera
+                cam_data = bpy.data.cameras.new(animated_cam_name)
+                animated_cam = bpy.data.objects.new(animated_cam_name, cam_data)
+                context.scene.collection.objects.link(animated_cam)
+
+            # Get camera resolution from COLMAP data
+            # All cameras in a COLMAP instance should have the same resolution
+            first_colmap_cam = colmap_cameras[0]
+
+            # Get the COLMAP root to access the model
+            root = None
+            for obj in bpy.data.objects:
+                if 'colmap_root' in obj and 'colmap_instance_name' in obj:
+                    if obj['colmap_instance_name'] == colmap_instance.name:
+                        root = obj
+                        break
+
+            if root and 'colmap_model_path' in root:
+                # Read camera data from COLMAP model
+                cameras, images, points3D = read_model(root['colmap_model_path'])
+
+                # Get camera ID from first COLMAP camera
+                if 'colmap_camera_id' in first_colmap_cam:
+                    camera_id = first_colmap_cam['colmap_camera_id']
+                    colmap_camera = cameras[camera_id]
+
+                    # Set render resolution
+                    context.scene.render.resolution_x = colmap_camera.width
+                    context.scene.render.resolution_y = colmap_camera.height
+
+                    # Set camera sensor and focal length
+                    cam_data = animated_cam.data
+                    cam_data.lens_unit = 'MILLIMETERS'
+
+                    if hasattr(colmap_camera, 'params') and len(colmap_camera.params) > 0:
+                        focal_length_pixels = colmap_camera.params[0]
+                        sensor_width_mm = 36.0  # Standard full frame width
+                        focal_length_mm = (focal_length_pixels * sensor_width_mm) / colmap_camera.width
+                        cam_data.lens = focal_length_mm
+
+                    logger.info(f"Set camera resolution to {colmap_camera.width}x{colmap_camera.height}")
+
+            # Clear existing animation data
+            if animated_cam.animation_data:
+                animated_cam.animation_data_clear()
+
+            # Sort frames
+            sorted_frames = sorted(frame_camera_map.keys())
+
+            # Set scene frame range
+            context.scene.frame_start = min(sorted_frames)
+            context.scene.frame_end = max(sorted_frames)
+
+            # Set camera to use quaternion rotation mode to avoid gimbal lock
+            animated_cam.rotation_mode = 'QUATERNION'
+
+            # Extract all rotations and locations first
+            locations = []
+            quaternions = []
+
+            for frame_num in sorted_frames:
+                colmap_cam = frame_camera_map[frame_num]
+
+                # Decompose the matrix to get location and rotation
+                loc, rot_quat, scale = colmap_cam.matrix_world.decompose()
+
+                locations.append(loc)
+                quaternions.append(rot_quat)
+
+            # Ensure quaternion continuity by making sure each quaternion is in the same hemisphere
+            # as the previous one (avoiding 180-degree flips)
+            for i in range(1, len(quaternions)):
+                # Check if we need to flip the quaternion to maintain continuity
+                # q and -q represent the same rotation, so we pick the one closer to the previous
+                dot_product = quaternions[i].dot(quaternions[i-1])
+                if dot_product < 0:
+                    # Flip the quaternion to maintain continuity
+                    quaternions[i].negate()
+
+            # Create keyframes for each frame
+            for i, frame_num in enumerate(sorted_frames):
+                # Set the current frame
+                context.scene.frame_set(frame_num)
+
+                # Set location and rotation
+                animated_cam.location = locations[i]
+                animated_cam.rotation_quaternion = quaternions[i]
+
+                # Insert keyframes for location and rotation
+                animated_cam.keyframe_insert(data_path="location", frame=frame_num)
+                animated_cam.keyframe_insert(data_path="rotation_quaternion", frame=frame_num)
+
+            # Set the animated camera as the active camera
+            context.scene.camera = animated_cam
+
+            self.report({'INFO'}, f"Created camera animation with {len(sorted_frames)} keyframes (frames {min(sorted_frames)}-{max(sorted_frames)})")
+            return {'FINISHED'}
+
+        except Exception as e:
+            self.report({'ERROR'}, f"Failed to create camera animation: {str(e)}")
+            logger.error(f"Failed to create camera animation: {str(e)}", exc_info=True)
+            return {'CANCELLED'}
+
+
 # Update the panel to include model import/export UI
 class SKY_SPLAT_PT_colmap_panel(bpy.types.Panel):
     bl_label = "SkySplat - Structure from Motion (COLMAP)"
@@ -1306,7 +1480,13 @@ class SKY_SPLAT_PT_colmap_panel(bpy.types.Panel):
                 row.operator("skysplat.export_colmap_model", icon='EXPORT')
                 if colmap_instance.is_exported:
                     row.label(text="✓ Exported", icon='CHECKMARK')
-            
+
+                # Camera Animation section
+                box.separator()
+                box.label(text="Camera Animation")
+                box.operator("skysplat.create_camera_animation", icon='CAMERA_DATA')
+                box.label(text="Creates animated camera from COLMAP cameras", icon='INFO')
+
             # Brush dataset preparation section
             box = layout.box()
             box.label(text="Brush Dataset Preparation")
@@ -1359,7 +1539,8 @@ classes = (
     SKY_SPLAT_OT_sync_with_video,
     SKY_SPLAT_OT_load_colmap_model,
     SKY_SPLAT_OT_export_colmap_model,
-    SKY_SPLAT_OT_prepare_brush_dataset,  
+    SKY_SPLAT_OT_create_camera_animation,
+    SKY_SPLAT_OT_prepare_brush_dataset,
     SKY_SPLAT_PT_colmap_panel,
 )
 
