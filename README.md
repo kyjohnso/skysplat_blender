@@ -10,7 +10,7 @@ In version 0.3.0 and earlier, if you wanted to process different scenes in the s
 - Load and extract frames from multiple drone videos
 - Run COLMAP processing on different datasets
 - Transform and export multiple COLMAP models independently
-- Train multiple Gaussian Splat models simultaneously
+- Train multiple Gaussian Splat models
 
 All with automatic path management ensuring no conflicts between projects.
 
@@ -35,7 +35,7 @@ All with automatic path management ensuring no conflicts between projects.
 <img src="images/video_panel_frame_extraction.png" width="400" alt="Video Panel Frame Extraction">
 
 ### 🎯 Multi-Instance COLMAP Integration
-- **Multiple COLMAP instances** - process different datasets simultaneously
+- **Multiple COLMAP instances** - process different datasets
 - Each instance maintains independent input/output paths
 - No file conflicts when processing multiple reconstructions
 - Path synchronization between video processing and reconstruction
@@ -76,7 +76,7 @@ All with automatic path management ensuring no conflicts between projects.
 - Independent training parameters per splat instance
 - Brush dataset preparation with automatic path linking
 - Real-time training viewer option
-- No file conflicts between concurrent training sessions
+- No file conflicts between training sessions
 
 <img src="images/brush_panel_instances.png" width="400" alt="Brush Panel Instances">
 </br>
@@ -256,7 +256,7 @@ When running operations like "Run COLMAP" or "Run Brush Training", the detailed 
 
 ## Multi-Instance Workflow Example
 
-This example demonstrates the power of SkySplat's multi-instance workflow, allowing you to process multiple drone videos simultaneously without any file collisions.
+This example demonstrates the power of SkySplat's multi-instance workflow, allowing you to manage multiple drone videos in the same .blend file without any file collisions.
 
 ### 1. Accessing the Toolkit
 - Open the sidebar in the 3D View (press N)
@@ -287,7 +287,7 @@ Switch to the COLMAP panel:
 - Click the chain link icon to auto-populate paths from video instances
 - Configure COLMAP settings (camera model, matching type, GPU usage)
 - Click "Run COLMAP" for each instance
-- **Process multiple videos in parallel** without conflicts
+- **No file conflicts** between different COLMAP instances
 
 <img src="images/colmap_panel_settings_and_processing.png" width="400" alt="COLMAP Multi-Instance">
 
@@ -325,7 +325,7 @@ Switch to the Gaussian Splatting (Brush) panel:
 - Each splat instance automatically links to its prepared dataset
 - Configure training parameters independently per instance
 - Click "Run Brush Training" for each splat
-- **Train multiple models simultaneously** without conflicts
+- **No file conflicts** between different training instances
 - Monitor each training session separately
 
 <img src="images/brush_panel_instances.png" width="400" alt="Brush Multi-Instance">
@@ -342,12 +342,12 @@ There is already a rich Blender addon ecosystem for loading 3D gaussian splats i
 
 ## Benefits of Multi-Instance Workflow
 
-✅ **Process multiple videos simultaneously** without waiting for sequential completion
+✅ **Manage multiple videos in one .blend file** - process different scenes without file conflicts
 ✅ **No file collisions** - automatic path management per instance
 ✅ **Independent settings** - different camera models, frame steps, training parameters
 ✅ **Organized projects** - each instance maintains its own folder structure
-✅ **Parallel processing** - run COLMAP and Brush training concurrently
-✅ **Scene management** - all models coexist in Blender without conflicts
+✅ **Streamlined workflow** - all models coexist in Blender without interfering
+✅ **Scene management** - switch between different video projects easily
 
 ## Single-Instance Workflow
 
@@ -378,7 +378,7 @@ None of the code from [Gaussian Splatting](https://github.com/graphdeco-inria/ga
 - ✅ **Animated camera creation** from COLMAP cameras with smooth quaternion interpolation
 - ✅ **Blender 5.0 compatibility** (also works with Blender 4.0+)
 - ✅ **No file collisions** - independent path management per instance
-- ✅ **Parallel processing** - run multiple COLMAP and Brush sessions simultaneously
+- ✅ **Organized workflow** - manage multiple projects in one .blend file
 
 **Version 0.3.0**
 - ✅ Packaged Brush app binaries with the addon
