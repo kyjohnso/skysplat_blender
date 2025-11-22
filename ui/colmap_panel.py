@@ -1,3 +1,4 @@
+
 import bpy
 import os
 import shutil
@@ -27,7 +28,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 logger = logging.getLogger('SkySplat')
 
 # Panel version constant
-PANEL_VERSION = "0.3.0"
+PANEL_VERSION = "0.4.0"  # Updated for multi-instance support
 
 def get_default_colmap_path():
     """Get default COLMAP path based on operating system"""
@@ -192,14 +193,12 @@ def get_default_magick_path():
     
     return ""
 
-class SKY_SPLAT_ColmapProperties(bpy.types.PropertyGroup):
-    """Properties for COLMAP processing"""
-    
-    colmap_path: bpy.props.StringProperty(
-        name="COLMAP Executable",
-        description="Path to the COLMAP executable",
-        subtype='FILE_PATH',
-        default=get_default_colmap_path()
+class ColmapInstance(bpy.types.PropertyGroup):
+    """Individual COLMAP instance with its own settings"""
+    name: bpy.props.StringProperty(
+        name="Instance Name",
+        description="Name for this COLMAP instance",
+        default="COLMAP"
     )
     
     input_folder: bpy.props.StringProperty(
@@ -214,7 +213,6 @@ class SKY_SPLAT_ColmapProperties(bpy.types.PropertyGroup):
         subtype='DIR_PATH'
     )
     
-    # New properties for model import/export paths
     model_import_path: bpy.props.StringProperty(
         name="Model Import Path",
         description="Path to sparse model folder (containing cameras.bin, images.bin, points3D.bin)",
@@ -227,17 +225,10 @@ class SKY_SPLAT_ColmapProperties(bpy.types.PropertyGroup):
         subtype='DIR_PATH'
     )
     
-    # Path for images when preparing brush dataset
     images_path: bpy.props.StringProperty(
         name="Images Path",
         description="Path to images folder for brush dataset preparation", 
         subtype='DIR_PATH'
-    )
-    
-    use_gpu: bpy.props.BoolProperty(
-        name="Use GPU",
-        description="Use GPU acceleration for COLMAP",
-        default=True
     )
     
     camera_model: bpy.props.EnumProperty(
@@ -264,28 +255,179 @@ class SKY_SPLAT_ColmapProperties(bpy.types.PropertyGroup):
         default='SEQUENTIAL'
     )
     
+    is_processed: bpy.props.BoolProperty(
+        name="Is Processed",
+        description="Whether COLMAP processing has been completed",
+        default=False
+    )
+    
+    is_loaded: bpy.props.BoolProperty(
+        name="Is Loaded",
+        description="Whether the model is loaded in Blender",
+        default=False
+    )
+    
+    is_exported: bpy.props.BoolProperty(
+        name="Is Exported",
+        description="Whether the transformed model has been exported",
+        default=False
+    )
+    
+    brush_dataset_prepared: bpy.props.BoolProperty(
+        name="Brush Dataset Prepared",
+        description="Whether the Brush dataset has been prepared",
+        default=False
+    )
+
+class SKY_SPLAT_ColmapProperties(bpy.types.PropertyGroup):
+    """Properties for COLMAP processing"""
+    
+    colmap_instances: bpy.props.CollectionProperty(
+        type=ColmapInstance,
+        name="COLMAP Instances",
+        description="Collection of COLMAP instances"
+    )
+    
+    active_colmap_index: bpy.props.IntProperty(
+        name="Active COLMAP Index",
+        description="Index of the currently active COLMAP instance",
+        default=0,
+        min=0
+    )
+    
+    colmap_path: bpy.props.StringProperty(
+        name="COLMAP Executable",
+        description="Path to the COLMAP executable",
+        subtype='FILE_PATH',
+        default=get_default_colmap_path()
+    )
+    
+    use_gpu: bpy.props.BoolProperty(
+        name="Use GPU",
+        description="Use GPU acceleration for COLMAP",
+        default=True
+    )
+    
+    # Legacy properties for backward compatibility
+    input_folder: bpy.props.StringProperty(
+        name="Input Folder",
+        description="Folder containing images to process with COLMAP (legacy)",
+        subtype='DIR_PATH'
+    )
+    
+    output_folder: bpy.props.StringProperty(
+        name="Output Folder",
+        description="Folder to save COLMAP results (legacy)",
+        subtype='DIR_PATH'
+    )
+    
+    model_import_path: bpy.props.StringProperty(
+        name="Model Import Path",
+        description="Path to sparse model folder (legacy)",
+        subtype='DIR_PATH'
+    )
+    
+    model_export_path: bpy.props.StringProperty(
+        name="Model Export Path", 
+        description="Path where transformed model will be saved (legacy)",
+        subtype='DIR_PATH'
+    )
+    
+    images_path: bpy.props.StringProperty(
+        name="Images Path",
+        description="Path to images folder (legacy)", 
+        subtype='DIR_PATH'
+    )
+    
+    camera_model: bpy.props.EnumProperty(
+        name="Camera Model",
+        description="COLMAP camera model to use (legacy)",
+        items=[
+            ('SIMPLE_PINHOLE', 'Simple Pinhole', 'Simple pinhole camera model'),
+            ('PINHOLE', 'Pinhole', 'Pinhole camera model'),
+            ('SIMPLE_RADIAL', 'Simple Radial', 'Simple radial camera model'),
+            ('RADIAL', 'Radial', 'Radial camera model'),
+            ('OPENCV', 'OpenCV', 'OpenCV camera model'),
+            ('FULL_OPENCV', 'Full OpenCV', 'Full OpenCV camera model'),
+        ],
+        default='OPENCV'
+    )
+
+    matching_type: bpy.props.EnumProperty(
+        name="Matching Type",
+        description="Choose between sequential or exhaustive matching (legacy)",
+        items=[
+            ('SEQUENTIAL', "Sequential", "Use sequential matching"),
+            ('EXHAUSTIVE', "Exhaustive", "Use exhaustive matching")
+        ],
+        default='SEQUENTIAL'
+    )
+    
     def update_from_video_panel(self, context):
         """Update COLMAP paths based on the frames extracted in the video panel"""
         video_props = context.scene.skysplat_props
         
-        if video_props.video_path:
-            # Get video path and name without extension
-            video_path = bpy.path.abspath(video_props.video_path)
-            video_dir = os.path.dirname(video_path)
-            video_name = os.path.splitext(os.path.basename(video_path))[0]
+        # Get active video instance
+        if len(video_props.video_instances) > 0:
+            video_instance = video_props.video_instances[video_props.active_video_index]
             
-            # Set default paths based on video name
-            frames_folder = os.path.join(video_dir, f"{video_name}_frames")
-            colmap_output_folder = os.path.join(video_dir, f"{video_name}_colmap_output")
-            
-            # Update paths
-            self.input_folder = frames_folder
-            self.output_folder = colmap_output_folder
-            
-            # Set model paths based on COLMAP output structure
-            self.model_import_path = os.path.join(colmap_output_folder, "sparse", "0")
-            self.model_export_path = os.path.join(colmap_output_folder, "transformed")
-            self.images_path = os.path.join(colmap_output_folder, "images")
+            if video_instance.video_path:
+                # Get video path and name without extension
+                video_path = bpy.path.abspath(video_instance.video_path)
+                video_dir = os.path.dirname(video_path)
+                video_name = os.path.splitext(os.path.basename(video_path))[0]
+                
+                # Set default paths based on video name
+                frames_folder = os.path.join(video_dir, f"{video_name}_frames")
+                colmap_output_folder = os.path.join(video_dir, f"{video_name}_colmap_output")
+                
+                # Get or create COLMAP instance for this video
+                if len(self.colmap_instances) == 0:
+                    colmap_instance = self.colmap_instances.add()
+                    colmap_instance.name = f"COLMAP_{video_name}"
+                else:
+                    colmap_instance = self.colmap_instances[self.active_colmap_index]
+                
+                # Update paths
+                colmap_instance.input_folder = frames_folder
+                colmap_instance.output_folder = colmap_output_folder
+                
+                # Set model paths based on COLMAP output structure
+                colmap_instance.model_import_path = os.path.join(colmap_output_folder, "sparse", "0")
+                colmap_instance.model_export_path = os.path.join(colmap_output_folder, "transformed")
+                colmap_instance.images_path = os.path.join(colmap_output_folder, "images")
+
+
+class SKY_SPLAT_OT_add_colmap_instance(bpy.types.Operator):
+    bl_idname = "skysplat.add_colmap_instance"
+    bl_label = "Add COLMAP Instance"
+    bl_description = "Add a new COLMAP instance"
+    
+    def execute(self, context):
+        props = context.scene.skysplat_colmap_props
+        new_instance = props.colmap_instances.add()
+        new_instance.name = f"COLMAP_{len(props.colmap_instances)}"
+        props.active_colmap_index = len(props.colmap_instances) - 1
+        self.report({'INFO'}, f"Added COLMAP instance: {new_instance.name}")
+        return {'FINISHED'}
+
+class SKY_SPLAT_OT_remove_colmap_instance(bpy.types.Operator):
+    bl_idname = "skysplat.remove_colmap_instance"
+    bl_label = "Remove COLMAP Instance"
+    bl_description = "Remove the active COLMAP instance"
+    
+    @classmethod
+    def poll(cls, context):
+        props = context.scene.skysplat_colmap_props
+        return len(props.colmap_instances) > 0
+    
+    def execute(self, context):
+        props = context.scene.skysplat_colmap_props
+        if len(props.colmap_instances) > 0:
+            props.colmap_instances.remove(props.active_colmap_index)
+            props.active_colmap_index = max(0, props.active_colmap_index - 1)
+            self.report({'INFO'}, "Removed COLMAP instance")
+        return {'FINISHED'}
 
 
 def run_command(command, cwd=None):
@@ -412,10 +554,10 @@ def validate_input_images(input_path):
     
     return True
 
-def run_colmap_processing(props):
+def run_colmap_processing(colmap_path, use_gpu, colmap_instance):
     """Run COLMAP processing with the given properties"""
     # Get paths
-    source_path = props.output_folder
+    source_path = colmap_instance.output_folder
     input_path = os.path.join(source_path, "input")
     database_path = os.path.join(source_path, "distorted", "database.db")
     
@@ -425,11 +567,11 @@ def run_colmap_processing(props):
         raise RuntimeError("Input image validation failed")
     
     # Configure COLMAP command
-    colmap_command = f'"{props.colmap_path}"' if props.colmap_path else "colmap"
-    use_gpu = 1 if props.use_gpu else 0
+    colmap_command = f'"{colmap_path}"' if colmap_path else "colmap"
+    use_gpu_val = 1 if use_gpu else 0
     
     # Get COLMAP version and appropriate options
-    colmap_options = get_colmap_version_and_options(props.colmap_path)
+    colmap_options = get_colmap_version_and_options(colmap_path)
     logger.info(f"Using COLMAP version: {colmap_options['version']}")
     
     # Create directories
@@ -441,8 +583,8 @@ def run_colmap_processing(props):
                  f'--database_path "{database_path}" ' \
                  f'--image_path "{input_path}" ' \
                  f'--ImageReader.single_camera 1 ' \
-                 f'--ImageReader.camera_model {props.camera_model} ' \
-                 f'--{colmap_options["feature_gpu_option"]} {use_gpu}'
+                 f'--ImageReader.camera_model {colmap_instance.camera_model} ' \
+                 f'--{colmap_options["feature_gpu_option"]} {use_gpu_val}'
     
     if run_command(feature_cmd) != 0:
         raise RuntimeError("Feature extraction failed")
@@ -452,15 +594,15 @@ def run_colmap_processing(props):
     inspect_colmap_database(database_path)
     
     # Feature matching - choose method based on matching_type
-    logger.info(f"=== Step 2: Feature Matching ({props.matching_type}) ===")
-    if props.matching_type == 'SEQUENTIAL':
+    logger.info(f"=== Step 2: Feature Matching ({colmap_instance.matching_type}) ===")
+    if colmap_instance.matching_type == 'SEQUENTIAL':
         matching_cmd = f'{colmap_command} sequential_matcher ' \
                       f'--database_path "{database_path}" ' \
-                      f'--{colmap_options["matching_gpu_option"]} {use_gpu}'
+                      f'--{colmap_options["matching_gpu_option"]} {use_gpu_val}'
     else:  # EXHAUSTIVE
         matching_cmd = f'{colmap_command} exhaustive_matcher ' \
                       f'--database_path "{database_path}" ' \
-                      f'--{colmap_options["matching_gpu_option"]} {use_gpu}'
+                      f'--{colmap_options["matching_gpu_option"]} {use_gpu_val}'
     
     if run_command(matching_cmd) != 0:
         raise RuntimeError("Feature matching failed")
@@ -534,16 +676,20 @@ class SKY_SPLAT_OT_run_colmap(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         props = context.scene.skysplat_colmap_props
-        return props.input_folder and os.path.exists(props.input_folder) and props.output_folder
+        if len(props.colmap_instances) == 0:
+            return False
+        colmap_instance = props.colmap_instances[props.active_colmap_index]
+        return colmap_instance.input_folder and os.path.exists(colmap_instance.input_folder) and colmap_instance.output_folder
     
     def execute(self, context):
         # Start timing
         start_time = time.time()
         
         props = context.scene.skysplat_colmap_props
+        colmap_instance = props.colmap_instances[props.active_colmap_index]
         
         # Test if input folder contains images
-        image_files = [f for f in os.listdir(props.input_folder)
+        image_files = [f for f in os.listdir(colmap_instance.input_folder)
                       if f.lower().endswith(('.jpg', '.png', '.jpeg'))]
         
         if not image_files:
@@ -551,26 +697,29 @@ class SKY_SPLAT_OT_run_colmap(bpy.types.Operator):
             return {'CANCELLED'}
         
         # Create output folder and input subfolder
-        os.makedirs(props.output_folder, exist_ok=True)
-        input_path = os.path.join(props.output_folder, "input")
+        os.makedirs(colmap_instance.output_folder, exist_ok=True)
+        input_path = os.path.join(colmap_instance.output_folder, "input")
         os.makedirs(input_path, exist_ok=True)
         
         # Copy images to COLMAP input folder
         for img in image_files:
-            src = os.path.join(props.input_folder, img)
+            src = os.path.join(colmap_instance.input_folder, img)
             dst = os.path.join(input_path, img)
             if not os.path.exists(dst):
                 shutil.copy2(src, dst)
         
         try:
             # Run COLMAP processing
-            run_colmap_processing(props)
+            run_colmap_processing(props.colmap_path, props.use_gpu, colmap_instance)
             
             # Auto-update model paths after successful COLMAP run
-            props.model_import_path = os.path.join(props.output_folder, "sparse", "0")
-            props.images_path = os.path.join(props.output_folder, "images")
-            if not props.model_export_path:
-                props.model_export_path = os.path.join(props.output_folder, "transformed")
+            colmap_instance.model_import_path = os.path.join(colmap_instance.output_folder, "sparse", "0")
+            colmap_instance.images_path = os.path.join(colmap_instance.output_folder, "images")
+            if not colmap_instance.model_export_path:
+                colmap_instance.model_export_path = os.path.join(colmap_instance.output_folder, "transformed")
+            
+            # Mark as processed
+            colmap_instance.is_processed = True
             
             # Calculate and print timing
             end_time = time.time()
@@ -593,29 +742,34 @@ class SKY_SPLAT_OT_prepare_brush_dataset(bpy.types.Operator):
     def poll(cls, context):
         # Check if transformed model exists and images path is set
         props = context.scene.skysplat_colmap_props
-        if not props.model_export_path or not props.images_path:
+        if len(props.colmap_instances) == 0:
+            return False
+        
+        colmap_instance = props.colmap_instances[props.active_colmap_index]
+        if not colmap_instance.model_export_path or not colmap_instance.images_path:
             return False
         
         # Check for exported model (either in sparse/0 subfolder or directly)
-        transformed_sparse = os.path.join(props.model_export_path, "sparse", "0")
+        transformed_sparse = os.path.join(colmap_instance.model_export_path, "sparse", "0")
         if not os.path.exists(transformed_sparse):
             # Maybe the model is directly in the export path
             required_files = ['cameras.bin', 'images.bin', 'points3D.bin']
-            if not all(os.path.exists(os.path.join(props.model_export_path, f)) for f in required_files):
+            if not all(os.path.exists(os.path.join(colmap_instance.model_export_path, f)) for f in required_files):
                 # Try .txt versions
                 txt_files = ['cameras.txt', 'images.txt', 'points3D.txt']
-                if not all(os.path.exists(os.path.join(props.model_export_path, f)) for f in txt_files):
+                if not all(os.path.exists(os.path.join(colmap_instance.model_export_path, f)) for f in txt_files):
                     return False
         
-        return os.path.exists(props.images_path)
+        return os.path.exists(colmap_instance.images_path)
     
     def execute(self, context):
         props = context.scene.skysplat_colmap_props
+        colmap_instance = props.colmap_instances[props.active_colmap_index]
         
         try:
             # Define paths
-            export_path = props.model_export_path
-            images_path = props.images_path
+            export_path = colmap_instance.model_export_path
+            images_path = colmap_instance.images_path
             
             # Determine source sparse model path
             transformed_sparse_src = os.path.join(export_path, "sparse", "0")
@@ -683,15 +837,39 @@ class SKY_SPLAT_OT_prepare_brush_dataset(bpy.types.Operator):
                             if not os.path.exists(dst_file):
                                 shutil.copy2(src_file, dst_file)
             
+            # Mark as prepared
+            colmap_instance.brush_dataset_prepared = True
+            
             self.report({'INFO'}, f"Brush dataset prepared at: {brush_dataset_dir}")
             
             # Auto-update the Gaussian Splatting panel if it exists
             if hasattr(context.scene, 'skysplat_brush_props'):
                 brush_props = context.scene.skysplat_brush_props
-                brush_props.source_path = brush_dataset_dir
-                if not brush_props.export_path:
-                    brush_props.export_path = os.path.join(parent_dir, "brush_output")
-                self.report({'INFO'}, "Updated Brush panel with dataset path")
+                # Try to find a matching splat instance by name
+                expected_name = f"Splat_{colmap_instance.name}"
+                splat_instance = None
+                splat_index = -1
+
+                for i, instance in enumerate(brush_props.splat_instances):
+                    if instance.name == expected_name:
+                        splat_instance = instance
+                        splat_index = i
+                        break
+
+                # If not found, create a new one
+                if splat_instance is None:
+                    splat_instance = brush_props.splat_instances.add()
+                    splat_instance.name = expected_name
+                    splat_index = len(brush_props.splat_instances) - 1
+                    self.report({'INFO'}, f"Created new splat instance: {expected_name}")
+                else:
+                    self.report({'INFO'}, f"Updated existing splat instance: {expected_name}")
+
+                # Set as active and update paths
+                brush_props.active_splat_index = splat_index
+                splat_instance.source_path = brush_dataset_dir
+                if not splat_instance.export_path:
+                    splat_instance.export_path = os.path.join(parent_dir, "brush_output")
             
             return {'FINISHED'}
             
@@ -721,11 +899,15 @@ class SKY_SPLAT_OT_load_colmap_model(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         props = context.scene.skysplat_colmap_props
-        return props.model_import_path and os.path.exists(props.model_import_path)
+        if len(props.colmap_instances) == 0:
+            return False
+        colmap_instance = props.colmap_instances[props.active_colmap_index]
+        return colmap_instance.model_import_path and os.path.exists(colmap_instance.model_import_path)
     
     def execute(self, context):
         props = context.scene.skysplat_colmap_props
-        sparse_dir = props.model_import_path
+        colmap_instance = props.colmap_instances[props.active_colmap_index]
+        sparse_dir = colmap_instance.model_import_path
         
         # Check if this is a sparse model directory (has the required files)
         required_files = ['cameras.bin', 'images.bin', 'points3D.bin']
@@ -739,8 +921,8 @@ class SKY_SPLAT_OT_load_colmap_model(bpy.types.Operator):
             return {'CANCELLED'}
             
         try:
-            # Create a new collection for the COLMAP data
-            collection_name = "COLMAP_Model"
+            # Create a new collection for the COLMAP data with instance name
+            collection_name = f"COLMAP_{colmap_instance.name}"
             if collection_name in bpy.data.collections:
                 collection = bpy.data.collections[collection_name]
                 # Clear collection
@@ -754,17 +936,18 @@ class SKY_SPLAT_OT_load_colmap_model(bpy.types.Operator):
             cameras, images, points3D = read_model(sparse_dir)
             
             # Create a root empty object that will be the parent for all COLMAP objects
-            root = bpy.data.objects.new("COLMAP_Root", None)
+            root = bpy.data.objects.new(f"COLMAP_Root_{colmap_instance.name}", None)
             root.empty_display_type = 'ARROWS'
             root.empty_display_size = 1.0
             collection.objects.link(root)
             root['colmap_root'] = True
             root['colmap_model_path'] = sparse_dir
+            root['colmap_instance_name'] = colmap_instance.name
             
             # Create point cloud first
             if points3D:
-                mesh = bpy.data.meshes.new("COLMAP_PointCloud")
-                obj = bpy.data.objects.new("COLMAP_PointCloud", mesh)
+                mesh = bpy.data.meshes.new(f"COLMAP_PointCloud_{colmap_instance.name}")
+                obj = bpy.data.objects.new(f"COLMAP_PointCloud_{colmap_instance.name}", mesh)
                 collection.objects.link(obj)
                 
                 # Create vertices and colors
@@ -852,6 +1035,7 @@ class SKY_SPLAT_OT_load_colmap_model(bpy.types.Operator):
                 cam_obj['colmap_image_id'] = image_id
                 cam_obj['colmap_camera_id'] = image.camera_id
                 cam_obj['original_filename'] = image.name  # Store the full original filename
+                cam_obj['colmap_instance_name'] = colmap_instance.name
                 
                 # Store original quaternion and tvec for export
                 cam_obj['colmap_qvec'] = image.qvec.tolist()
@@ -859,6 +1043,9 @@ class SKY_SPLAT_OT_load_colmap_model(bpy.types.Operator):
                 
                 # Parent to root
                 cam_obj.parent = root
+            
+            # Mark as loaded
+            colmap_instance.is_loaded = True
             
             # Select the root object so user can transform it
             for obj in bpy.context.selected_objects:
@@ -881,35 +1068,42 @@ class SKY_SPLAT_OT_export_colmap_model(bpy.types.Operator):
     
     @classmethod
     def poll(cls, context):
-        # Check if COLMAP root exists in the scene
+        props = context.scene.skysplat_colmap_props
+        if len(props.colmap_instances) == 0:
+            return False
+        
+        colmap_instance = props.colmap_instances[props.active_colmap_index]
+        
+        # Check if COLMAP root exists in the scene for this instance
         for obj in bpy.data.objects:
-            if 'colmap_root' in obj and 'colmap_model_path' in obj:
-                props = context.scene.skysplat_colmap_props
-                return props.model_export_path
+            if 'colmap_root' in obj and 'colmap_instance_name' in obj:
+                if obj['colmap_instance_name'] == colmap_instance.name:
+                    return colmap_instance.model_export_path
         return False
     
 
-
     def execute(self, context):
         props = context.scene.skysplat_colmap_props
+        colmap_instance = props.colmap_instances[props.active_colmap_index]
         
         try:
-            # Find the COLMAP root object
+            # Find the COLMAP root object for this instance
             root = None
             for obj in bpy.data.objects:
-                if 'colmap_root' in obj:
-                    root = obj
-                    break
+                if 'colmap_root' in obj and 'colmap_instance_name' in obj:
+                    if obj['colmap_instance_name'] == colmap_instance.name:
+                        root = obj
+                        break
             
             if not root:
-                self.report({'ERROR'}, "COLMAP root object not found")
+                self.report({'ERROR'}, f"COLMAP root object not found for instance {colmap_instance.name}")
                 return {'CANCELLED'}
             
             # Get the source model path
             source_path = root['colmap_model_path']
             
             # Create export directory
-            export_dir = os.path.join(props.model_export_path, "sparse", "0")
+            export_dir = os.path.join(colmap_instance.model_export_path, "sparse", "0")
             os.makedirs(export_dir, exist_ok=True)
             
             # Read the original model
@@ -925,8 +1119,9 @@ class SKY_SPLAT_OT_export_colmap_model(bpy.types.Operator):
             # Create a dictionary of image objects by ID for quick lookup
             image_objects = {}
             for obj in bpy.data.objects:
-                if 'colmap_image_id' in obj:
-                    image_objects[obj['colmap_image_id']] = obj
+                if 'colmap_image_id' in obj and 'colmap_instance_name' in obj:
+                    if obj['colmap_instance_name'] == colmap_instance.name:
+                        image_objects[obj['colmap_image_id']] = obj
             
             # Update camera poses based on the transformed Blender objects
             for image_id, image in images.items():
@@ -974,7 +1169,7 @@ class SKY_SPLAT_OT_export_colmap_model(bpy.types.Operator):
             # Transform point cloud if needed
             point_cloud = None
             for obj in bpy.data.objects:
-                if 'colmap_points3D' in obj:
+                if 'colmap_points3D' in obj and obj.parent == root:
                     point_cloud = obj
                     break
             
@@ -1007,6 +1202,9 @@ class SKY_SPLAT_OT_export_colmap_model(bpy.types.Operator):
             # Write the updated model
             write_model(cameras, images, points3D, export_dir)
             
+            # Mark as exported
+            colmap_instance.is_exported = True
+            
             self.report({'INFO'}, f"Transformed COLMAP model exported to {export_dir}")
             return {'FINISHED'}
         except Exception as e:
@@ -1028,83 +1226,122 @@ class SKY_SPLAT_PT_colmap_panel(bpy.types.Panel):
         layout = self.layout
         props = context.scene.skysplat_colmap_props
         
-        # COLMAP executables and options
+        # COLMAP instance management
         box = layout.box()
-        box.label(text="COLMAP Settings")
-        box.prop(props, "colmap_path")
-        box.prop(props, "camera_model")
-        box.prop(props, "matching_type")
+        box.label(text="COLMAP Instances", icon='CAMERA_DATA')
         
         row = box.row()
-        row.prop(props, "use_gpu")
+        row.template_list("UI_UL_list", "colmap_instances", props, "colmap_instances", 
+                         props, "active_colmap_index", rows=3)
         
-        # Input/Output settings for COLMAP processing
-        box = layout.box()
-        box.label(text="COLMAP Processing")
+        col = row.column(align=True)
+        col.operator("skysplat.add_colmap_instance", icon='ADD', text="")
+        col.operator("skysplat.remove_colmap_instance", icon='REMOVE', text="")
         
-        row = box.row()
-        row.prop(props, "input_folder")
-        row.operator("skysplat.sync_with_video", icon='LINKED', text="")
-        
-        box.prop(props, "output_folder")
-        
-        # Run COLMAP button
-        box.operator("skysplat.run_colmap", icon='CAMERA_DATA')
-        
-        # COLMAP model transformation section
-        box = layout.box()
-        box.label(text="COLMAP Model Transformation")
-        
-        # Model paths
-        path_box = box.box()
-        path_box.label(text="Model Paths:")
-        path_box.prop(props, "model_import_path", text="Import From")
-        path_box.prop(props, "model_export_path", text="Export To")
-        path_box.prop(props, "images_path", text="Images")
-        
-        # Load model button
-        box.operator("skysplat.load_colmap_model", icon='IMPORT')
-        
-        # Check if model is loaded
-        has_colmap_root = False
-        for obj in bpy.data.objects:
-            if 'colmap_root' in obj:
-                has_colmap_root = True
-                break
-                
-        if has_colmap_root:
-            # Instructions
-            box.label(text="Use Blender's transform tools to adjust the model.")
-            box.label(text="Select the COLMAP_Root object to transform everything.")
+        # Show active COLMAP instance settings
+        if len(props.colmap_instances) > 0 and props.active_colmap_index < len(props.colmap_instances):
+            colmap_instance = props.colmap_instances[props.active_colmap_index]
             
-            # Export model button
-            box.operator("skysplat.export_colmap_model", icon='EXPORT')
-        
-        # Brush dataset preparation section
-        box = layout.box()
-        box.label(text="Brush Dataset Preparation")
-        
-        # Check if we can prepare brush dataset
-        can_prepare_brush = False
-        if props.model_export_path and props.images_path:
-            # Check for exported model (either in sparse/0 subfolder or directly)
-            transformed_sparse = os.path.join(props.model_export_path, "sparse", "0")
-            if os.path.exists(transformed_sparse) and os.path.exists(props.images_path):
-                can_prepare_brush = True
-            elif os.path.exists(props.model_export_path) and os.path.exists(props.images_path):
-                # Check if model files are directly in export path
-                required_files = ['cameras.bin', 'images.bin', 'points3D.bin']
-                txt_files = ['cameras.txt', 'images.txt', 'points3D.txt']
-                has_bin_files = all(os.path.exists(os.path.join(props.model_export_path, f)) for f in required_files)
-                has_txt_files = all(os.path.exists(os.path.join(props.model_export_path, f)) for f in txt_files)
-                can_prepare_brush = has_bin_files or has_txt_files
-        
-        if can_prepare_brush:
-            box.operator("skysplat.prepare_brush_dataset", icon='PACKAGE')
-            parent_dir = os.path.dirname(props.model_export_path) if props.model_export_path else ""
-            box.label(text=f"Creates: {parent_dir}/brush_dataset/", icon='INFO')
+            # Instance name
+            box.prop(colmap_instance, "name")
+            
+            # COLMAP executables and options
+            box = layout.box()
+            box.label(text="COLMAP Settings")
+            box.prop(props, "colmap_path")
+            box.prop(colmap_instance, "camera_model")
+            box.prop(colmap_instance, "matching_type")
+            
+            row = box.row()
+            row.prop(props, "use_gpu")
+            
+            # Input/Output settings for COLMAP processing
+            box = layout.box()
+            box.label(text="COLMAP Processing")
+            
+            row = box.row()
+            row.prop(colmap_instance, "input_folder")
+            row.operator("skysplat.sync_with_video", icon='LINKED', text="")
+            
+            box.prop(colmap_instance, "output_folder")
+            
+            # Run COLMAP button
+            row = box.row()
+            row.operator("skysplat.run_colmap", icon='CAMERA_DATA')
+            if colmap_instance.is_processed:
+                row.label(text="✓ Processed", icon='CHECKMARK')
+            
+            # COLMAP model transformation section
+            box = layout.box()
+            box.label(text="COLMAP Model Transformation")
+            
+            # Model paths
+            path_box = box.box()
+            path_box.label(text="Model Paths:")
+            path_box.prop(colmap_instance, "model_import_path", text="Import From")
+            path_box.prop(colmap_instance, "model_export_path", text="Export To")
+            path_box.prop(colmap_instance, "images_path", text="Images")
+            
+            # Load model button
+            row = box.row()
+            row.operator("skysplat.load_colmap_model", icon='IMPORT')
+            if colmap_instance.is_loaded:
+                row.label(text="✓ Loaded", icon='CHECKMARK')
+            
+            # Check if model is loaded
+            has_colmap_root = False
+            for obj in bpy.data.objects:
+                if 'colmap_root' in obj and 'colmap_instance_name' in obj:
+                    if obj['colmap_instance_name'] == colmap_instance.name:
+                        has_colmap_root = True
+                        break
+                    
+            if has_colmap_root:
+                # Instructions
+                box.label(text="Use Blender's transform tools to adjust the model.")
+                box.label(text=f"Select COLMAP_Root_{colmap_instance.name} to transform.")
+                
+                # Export model button
+                row = box.row()
+                row.operator("skysplat.export_colmap_model", icon='EXPORT')
+                if colmap_instance.is_exported:
+                    row.label(text="✓ Exported", icon='CHECKMARK')
+            
+            # Brush dataset preparation section
+            box = layout.box()
+            box.label(text="Brush Dataset Preparation")
+            
+            # Check if we can prepare brush dataset
+            can_prepare_brush = False
+            if colmap_instance.model_export_path and colmap_instance.images_path:
+                # Check for exported model (either in sparse/0 subfolder or directly)
+                transformed_sparse = os.path.join(colmap_instance.model_export_path, "sparse", "0")
+                if os.path.exists(transformed_sparse) and os.path.exists(colmap_instance.images_path):
+                    can_prepare_brush = True
+                elif os.path.exists(colmap_instance.model_export_path) and os.path.exists(colmap_instance.images_path):
+                    # Check if model files are directly in export path
+                    required_files = ['cameras.bin', 'images.bin', 'points3D.bin']
+                    txt_files = ['cameras.txt', 'images.txt', 'points3D.txt']
+                    has_bin_files = all(os.path.exists(os.path.join(colmap_instance.model_export_path, f)) for f in required_files)
+                    has_txt_files = all(os.path.exists(os.path.join(colmap_instance.model_export_path, f)) for f in txt_files)
+                    can_prepare_brush = has_bin_files or has_txt_files
+            
+            if can_prepare_brush:
+                row = box.row()
+                row.operator("skysplat.prepare_brush_dataset", icon='PACKAGE')
+                if colmap_instance.brush_dataset_prepared:
+                    row.label(text="✓ Prepared", icon='CHECKMARK')
+                parent_dir = os.path.dirname(colmap_instance.model_export_path) if colmap_instance.model_export_path else ""
+                box.label(text=f"Creates: {parent_dir}/brush_dataset/", icon='INFO')
+            else:
+                box.label(text="Export transformed model and set images path first", icon='ERROR')
+            
+            # Info about shared paths
+            box = layout.box()
+            box.label(text="💡 Tip: Multiple videos can use the same", icon='INFO')
+            box.label(text="input folder for combined COLMAP processing")
         else:
-            box.label(text="Export transformed model and set images path first", icon='ERROR')
+            box.label(text="Add a COLMAP instance to begin", icon='INFO')
         
         # Version indicator at the bottom
         row = layout.row()
@@ -1114,7 +1351,10 @@ class SKY_SPLAT_PT_colmap_panel(bpy.types.Panel):
 
 # Registration
 classes = (
+    ColmapInstance,
     SKY_SPLAT_ColmapProperties,
+    SKY_SPLAT_OT_add_colmap_instance,
+    SKY_SPLAT_OT_remove_colmap_instance,
     SKY_SPLAT_OT_run_colmap,
     SKY_SPLAT_OT_sync_with_video,
     SKY_SPLAT_OT_load_colmap_model,
@@ -1132,3 +1372,4 @@ def unregister():
     for cls in reversed(classes):
         bpy.utils.unregister_class(cls)
     del bpy.types.Scene.skysplat_colmap_props
+    
