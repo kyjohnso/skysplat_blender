@@ -4,6 +4,31 @@ import time
 
 PANEL_VERSION = "0.4.0"  # Updated version for multi-instance support
 
+def get_all_sequences(seq_editor):
+    """Get all sequences from the sequence editor (compatible with Blender 4.5 and 5.0)"""
+    # Blender 5.0 changed sequences_all to strips_all
+    if hasattr(seq_editor, 'strips_all'):
+        return seq_editor.strips_all
+    else:
+        return seq_editor.sequences_all
+
+def get_sequences_collection(seq_editor):
+    """Get the sequences collection for adding new strips (compatible with Blender 4.5 and 5.0)"""
+    # Blender 5.0 changed sequences to strips
+    if hasattr(seq_editor, 'strips'):
+        return seq_editor.strips
+    else:
+        return seq_editor.sequences
+
+def get_skysplat_props(context):
+    """Get skysplat props from the correct scene (compatible with Blender 4.5 and 5.0)"""
+    # In Blender 5.0+, the sequencer scene is separate from the window scene
+    # We store data in the window scene, not the sequencer scene
+    if hasattr(context, 'window') and context.window and hasattr(context.window, 'scene'):
+        return context.window.scene.skysplat_props
+    else:
+        return context.scene.skysplat_props
+
 def update_srt_path(self, context):
     """Update SRT path when video path changes"""
     if self.video_path:
@@ -151,9 +176,23 @@ class SKY_SPLAT_OT_add_video_instance(bpy.types.Operator):
     bl_idname = "skysplat.add_video_instance"
     bl_label = "Add Video Instance"
     bl_description = "Add a new video instance"
-    
+
     def execute(self, context):
-        props = context.scene.skysplat_props
+        # In Blender 5.0+, ensure sequencer scene exists before creating video instances
+        has_sequencer_scene_support = hasattr(context, 'sequencer_scene') or hasattr(context.workspace, 'sequencer_scene')
+
+        if has_sequencer_scene_support:
+            # Check if a sequencer scene exists
+            has_sequencer_scene = (hasattr(context, 'sequencer_scene') and context.sequencer_scene) or \
+                                 (hasattr(context.workspace, 'sequencer_scene') and context.workspace.sequencer_scene)
+
+            if not has_sequencer_scene:
+                # Create sequencer scene first
+                self.report({'INFO'}, "Creating sequencer scene for video editing")
+                bpy.ops.scene.new_sequencer_scene(type='NEW')
+
+        # Now add the video instance (props will be from window scene)
+        props = get_skysplat_props(context)
         new_instance = props.video_instances.add()
         new_instance.name = f"Video_{len(props.video_instances)}"
         props.active_video_index = len(props.video_instances) - 1
@@ -167,11 +206,11 @@ class SKY_SPLAT_OT_remove_video_instance(bpy.types.Operator):
     
     @classmethod
     def poll(cls, context):
-        props = context.scene.skysplat_props
+        props = get_skysplat_props(context)
         return len(props.video_instances) > 0
-    
+
     def execute(self, context):
-        props = context.scene.skysplat_props
+        props = get_skysplat_props(context)
         if len(props.video_instances) > 0:
             props.video_instances.remove(props.active_video_index)
             props.active_video_index = max(0, props.active_video_index - 1)
@@ -184,35 +223,66 @@ class SKY_SPLAT_OT_load_video(bpy.types.Operator):
     bl_description = "Load the video and associated SRT file into the Video Sequencer"
 
     def execute(self, context):
-        props = context.scene.skysplat_props
-        
+        # Get props from the correct scene (window scene, not sequencer scene)
+        props = get_skysplat_props(context)
+
         # Get active video instance
         if len(props.video_instances) == 0:
             self.report({'ERROR'}, "No video instances. Add a video instance first.")
             return {'CANCELLED'}
-        
+
         video_instance = props.video_instances[props.active_video_index]
-        
+
         # Validate paths
         if not video_instance.video_path:
             self.report({'ERROR'}, "Please select a video file")
             return {'CANCELLED'}
-            
+
         video_path = bpy.path.abspath(video_instance.video_path)
         if not os.path.exists(video_path):
             self.report({'ERROR'}, f"Video file not found: {video_instance.video_path}")
             return {'CANCELLED'}
-        
+
+        # Get the sequencer scene (Blender 5.0 uses workspace.sequencer_scene, fallback to context.scene)
+        # Check if we're in Blender 5.0+ with sequencer scene support
+        has_sequencer_scene_support = hasattr(context, 'sequencer_scene') or hasattr(context.workspace, 'sequencer_scene')
+
+        if has_sequencer_scene_support:
+            # Blender 5.0+ path
+            if hasattr(context, 'sequencer_scene') and context.sequencer_scene:
+                target_scene = context.sequencer_scene
+                self.report({'INFO'}, f"Using context.sequencer_scene: {target_scene.name}")
+            elif hasattr(context.workspace, 'sequencer_scene') and context.workspace.sequencer_scene:
+                target_scene = context.workspace.sequencer_scene
+                self.report({'INFO'}, f"Using workspace.sequencer_scene: {target_scene.name}")
+            else:
+                # No sequencer scene exists yet, create one
+                self.report({'INFO'}, "No sequencer scene found, creating new sequencer scene")
+                bpy.ops.scene.new_sequencer_scene(type='NEW')
+                # After creating, get the newly created sequencer scene
+                if hasattr(context, 'sequencer_scene') and context.sequencer_scene:
+                    target_scene = context.sequencer_scene
+                elif hasattr(context.workspace, 'sequencer_scene') and context.workspace.sequencer_scene:
+                    target_scene = context.workspace.sequencer_scene
+                else:
+                    # Fallback if something went wrong
+                    target_scene = context.scene
+                self.report({'INFO'}, f"Created and using sequencer scene: {target_scene.name}")
+        else:
+            # Blender 4.5 and earlier path
+            target_scene = context.scene
+            self.report({'INFO'}, f"Using context.scene: {target_scene.name}")
+
         # Set up the Video Sequencer
-        if not context.scene.sequence_editor:
-            context.scene.sequence_editor_create()
-        
-        seq_editor = context.scene.sequence_editor
+        if not target_scene.sequence_editor:
+            target_scene.sequence_editor_create()
+
+        seq_editor = target_scene.sequence_editor
         
         # Find the next available channel
         # Check all existing strips to find the highest channel in use
         max_channel = 0
-        for strip in seq_editor.sequences_all:
+        for strip in get_all_sequences(seq_editor):
             if strip.channel > max_channel:
                 max_channel = strip.channel
         
@@ -220,19 +290,22 @@ class SKY_SPLAT_OT_load_video(bpy.types.Operator):
         next_channel = max_channel + 1 if max_channel > 0 else 1
         
         # Add video strip to the next available channel
-        video_strip = seq_editor.sequences.new_movie(
+        sequences_collection = get_sequences_collection(seq_editor)
+        video_strip = sequences_collection.new_movie(
             name=os.path.basename(video_path),
             filepath=video_path,
             channel=next_channel,
             frame_start=1
         )
-        
+
+        self.report({'INFO'}, f"Added strip '{video_strip.name}' to channel {next_channel} in scene '{target_scene.name}'")
+
         # Store the channel number in the video instance for reference
         video_instance['sequencer_channel'] = next_channel
-        
+
         # Auto-set scene frame range to match video
-        context.scene.frame_start = 1
-        context.scene.frame_end = video_strip.frame_final_duration
+        target_scene.frame_start = 1
+        target_scene.frame_end = video_strip.frame_final_duration
         
         # Set default frame extraction range based on video
         video_instance.frame_start = 1
@@ -295,8 +368,8 @@ class SKY_SPLAT_OT_extract_frames(bpy.types.Operator):
     def execute(self, context):
         # Start timing
         start_time = time.time()
-        
-        props = context.scene.skysplat_props
+
+        props = get_skysplat_props(context)
         
         # Get active video instance
         if len(props.video_instances) == 0:
@@ -339,15 +412,15 @@ class SKY_SPLAT_OT_extract_frames(bpy.types.Operator):
             
             if context.scene.sequence_editor:
                 # First pass: find the target strip and store all mute states
-                for seq in context.scene.sequence_editor.sequences_all:
+                for seq in get_all_sequences(context.scene.sequence_editor):
                     if seq.type == 'MOVIE':
                         original_mute_states[seq.name] = seq.mute
                         # Match by filename to find our target strip
                         if seq.name == video_filename or seq.filepath == video_path:
                             target_strip = seq
-                
+
                 # Second pass: mute all video strips except the target
-                for seq in context.scene.sequence_editor.sequences_all:
+                for seq in get_all_sequences(context.scene.sequence_editor):
                     if seq.type == 'MOVIE':
                         if seq == target_strip:
                             seq.mute = False  # Ensure target is unmuted
@@ -404,7 +477,7 @@ class SKY_SPLAT_OT_extract_frames(bpy.types.Operator):
         finally:
             # Restore original mute states for all video strips
             if context.scene.sequence_editor:
-                for seq in context.scene.sequence_editor.sequences_all:
+                for seq in get_all_sequences(context.scene.sequence_editor):
                     if seq.type == 'MOVIE' and seq.name in original_mute_states:
                         seq.mute = original_mute_states[seq.name]
             
@@ -430,7 +503,7 @@ class SKY_SPLAT_PT_video_panel(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
-        props = context.scene.skysplat_props
+        props = get_skysplat_props(context)
         
         # Video instance management
         box = layout.box()
