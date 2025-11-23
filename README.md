@@ -14,6 +14,8 @@ In version 0.3.0 and earlier, if you wanted to process different scenes in the s
 
 All with automatic path management ensuring no conflicts between projects.
 
+Also, now in version 0.4.0 you can automatically animate a camera to follow the COLMAP cameras and create key frames. This enables you to make sweet transition videos between the captured video and the rendered 3dgs.
+
 <img src="images/pumproom_7000_5.png" width="700" alt="Pumproom 3D Gaussian Splat">
 
 ## Key Features
@@ -84,15 +86,14 @@ All with automatic path management ensuring no conflicts between projects.
 
 ## Requirements
 
-- **Blender 5.0.0 or newer** (also compatible with Blender 4.0+)
+- **Blender 5.0 or newer** (also compatible with Blender 4.0+)
 - COLMAP (for reconstruction features)
-- [Brush App](https://github.com/ArthurBrussee/brush) - bundled with addon
-
-**Note**: The [Brush App](https://github.com/ArthurBrussee/brush) for Gaussian Splatting is now bundled with the addon - no separate installation required!
+- [Brush App](https://github.com/ArthurBrussee/brush) binaries (bundled with releases)
 
 ## Installation
 
 ### 1. Download and Install SkySplat
+
 1. Download the latest release zip file from [SkySplat Releases](https://github.com/kyjohnso/skysplat_blender/releases/latest)
 
    **OR**
@@ -142,60 +143,38 @@ The executable will typically be installed to `/usr/bin/colmap`.
 
 **Note:** For SkySplat to work properly, you'll need to know the path to the COLMAP executable. The addon will attempt to auto-detect common installation paths, but you can manually specify the path in the COLMAP panel if needed.
 
-### 3. Install Brush app
+### 3. Fix Brush Binary Permissions
 
-The brush app from [brush app](https://github.com/ArthurBrussee/brush) is needed for the 3DGS training of the scene. The brush binaries for all mac/linux/windows are included with this addon, however, when Blender installs an addon via a zip file, it changes the permissions on the extracted files (this is for everyone's benefit), and these cannot be executed by default.
+Brush binaries are bundled with the addon for all platforms. On macOS and Linux, you need to make them executable and may need to remove quarantine attributes.
 
-You have 3 options for running brush from this addon:
+#### macOS
 
-#### Option 1: Fix Permissions on Bundled Binaries (Recommended)
+```bash
+# Navigate to the addon binaries directory
+cd ~/Library/Application\ Support/Blender/5.0/scripts/addons/skysplat_blender/binaries/
 
-After installing the SkySplat addon, you'll need to make the bundled brush binaries executable:
+# Make executable
+chmod +x brush_app_mac
 
-**macOS/Linux:**
-1. Open Terminal
-2. Navigate to your Blender addons directory:
-   - **macOS (Blender 5.0)**: `~/Library/Application Support/Blender/5.0/scripts/addons/skysplat_blender/binaries/`
-   - **macOS (Blender 4.0)**: `~/Library/Application Support/Blender/4.0/scripts/addons/skysplat_blender/binaries/`
-   - **Linux (Blender 5.0)**: `~/.config/blender/5.0/scripts/addons/skysplat_blender/binaries/`
-   - **Linux (Blender 4.0)**: `~/.config/blender/4.0/scripts/addons/skysplat_blender/binaries/`
-3. Make the binary executable:
-   ```bash
-   # For macOS
-   chmod +x brush_app_mac
-   ```
+# Remove quarantine attribute (if you get "Apple could not verify" error)
+xattr -d com.apple.quarantine brush_app_mac
+```
 
+#### Linux
 
-   ```bash
-   # For Linux
-   chmod +x brush_app_linux
-   ```
+```bash
+# Navigate to the addon binaries directory
+cd ~/.config/blender/5.0/scripts/addons/skysplat_blender/binaries/
 
-**Windows:**
-Windows executables should work without permission changes, but if you encounter issues, right-click on [`brush_app_windows.exe`](binaries/brush_app_windows.exe) → Properties → Security → and ensure your user has "Full control" permissions.
+# Make executable
+chmod +x brush_app_linux
+```
 
-#### Option 2: Download Pre-compiled Binaries
+#### Windows
 
-If you prefer to download the binaries separately, you can get them directly from the Brush repository releases:
+No additional steps required - the `.exe` file should work directly.
 
-1. **Windows**: Download [`brush_app_windows.exe`](https://github.com/ArthurBrussee/brush/releases/latest) from Brush Releases
-2. **macOS**: Download [`brush_app_macos`](https://github.com/ArthurBrussee/brush/releases/latest) from Brush Releases
-
-  On macos, if you get an error something to the effect of "Apple could not verify "brush_app_mac" you may need to remove the quarantine from the downloaded file. This applies to downloads from the brush repo as well as the skysplat repo.
-
-   ```bash
-   xattr -d com.apple.quarantine /path/to/brush_app_mac
-   ```
-3. **Linux**: Download [`brush_app_linux`](https://github.com/ArthurBrussee/brush/releases/latest) from Brush Releases
-
-You can also get the compiled binaries in the skysplat_blender repo
-1. **Windows**: [`brush_app_windows.exe`](https://github.com/kyjohnso/skysplat_blender/blob/main/binaries/brush_app_windows.exe)
-2. **macOS (Apple silicon)**: [`brush_app_mac`](https://github.com/kyjohnso/skysplat_blender/blob/main/binaries/brush_app_mac)
-3. **linux**: [`brush_app_linux`](https://github.com/kyjohnso/skysplat_blender/blob/main/binaries/brush_app_linux)
-
-**Important**: You will need to know the full path to where you downloaded these binaries, as you'll need to specify this path in the SkySplat 3DGS panel's "Brush Executable" field.
-
-#### Option 3: Clone and Build Brush from Source
+#### Alternative: Build from Source
 
 For the most up-to-date version or if you want to modify the source code:
 
@@ -355,7 +334,7 @@ Of course, you can still use SkySplat for single video workflows! The multi-inst
 
 ## Contributing
 
-The best thing someone can do is try this workflow with their own drone videos and please tell me about your experience. This is the very first iteration of multi-instance support and I know with an engaged open source community we can create some amazing splats, renders, experiences and art.
+The best thing someone can do is try this workflow with their own drone videos and please tell me about your experience. This is still and early project and I know with an engaged open source community we can create some amazing splats, renders, experiences and art.
 
 <img src="images/school5.png" width="600" alt="School Scene">
 
