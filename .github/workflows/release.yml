@@ -1,11 +1,12 @@
-name: Create Release Archive
+name: Create Release Archives
 
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - 'v*'
 
 jobs:
-  create-archive:
+  create-archives:
     runs-on: ubuntu-latest
     
     steps:
@@ -13,41 +14,191 @@ jobs:
       uses: actions/checkout@v4
       with:
         fetch-depth: 0
+        lfs: true
     
-    - name: Create archive with correct directory structure
+    - name: Fetch LFS files
+      run: git lfs pull
+    
+    - name: Extract version from tag
+      id: get_version
       run: |
-        # Create the target directory structure in workspace
-        mkdir -p skysplat_blender
-        
-        # Copy all files except .git and images directory
-        for item in *; do
-          if [[ "$item" != ".git" && "$item" != "images" && "$item" != "skysplat_blender" ]]; then
-            cp -r "$item" skysplat_blender/
-          fi
-        done
-        
-        # Copy hidden files except .git
-        for item in .*; do
-          if [[ "$item" != "." && "$item" != ".." && "$item" != ".git" ]]; then
-            cp -r "$item" skysplat_blender/
-          fi
-        done
-        
-        # Create the zip file
-        zip -r skysplat_blender.zip skysplat_blender/
-        
-        # Verify the zip structure
-        echo "Checking zip file contents:"
-        unzip -l skysplat_blender.zip | head -20
-        echo "Zip file size:"
-        ls -lh skysplat_blender.zip
+        # Extract version from tag (e.g., v0.4.0 -> 0.4.0)
+        VERSION=${GITHUB_REF#refs/tags/v}
+        echo "version=${VERSION}" >> $GITHUB_OUTPUT
+        echo "Building release archives for version ${VERSION}"
     
-    - name: Upload archive to release
-      uses: actions/upload-release-asset@v1
+    - name: Create base archive (no binaries)
+      run: |
+        VERSION="${{ steps.get_version.outputs.version }}"
+        TEMP_DIR="temp_build"
+        BUILD_DIR="${TEMP_DIR}/skysplat_blender"
+        
+        echo "Creating base archive without binaries..."
+        
+        # Create temp directory
+        mkdir -p "${BUILD_DIR}"
+        
+        # Copy common files (excluding binaries and images)
+        for item in __init__.py .gitattributes .gitignore config.py LICENSE README.md requirements.txt .claude .github docs operators ui utils website; do
+          if [ -e "${item}" ]; then
+            cp -r "${item}" "${BUILD_DIR}/"
+          fi
+        done
+        
+        # Create zip from temp directory
+        cd "${TEMP_DIR}"
+        zip -r "../skysplat_blender_${VERSION}.zip" "skysplat_blender" \
+          -x "*.pyc" \
+          -x "*__pycache__*" \
+          -x "*.DS_Store" \
+          -x "*/.git/*"
+        
+        cd ..
+        rm -rf "${TEMP_DIR}"
+        
+        echo "✓ Created skysplat_blender_${VERSION}.zip"
+        ls -lh "skysplat_blender_${VERSION}.zip"
+    
+    - name: Create Windows archive
+      run: |
+        VERSION="${{ steps.get_version.outputs.version }}"
+        TEMP_DIR="temp_build"
+        BUILD_DIR="${TEMP_DIR}/skysplat_blender"
+        
+        echo "Creating Windows archive..."
+        
+        # Create temp directory
+        mkdir -p "${BUILD_DIR}/binaries"
+        
+        # Copy common files
+        for item in __init__.py .gitattributes .gitignore config.py LICENSE README.md requirements.txt .claude .github docs operators ui utils website; do
+          if [ -e "${item}" ]; then
+            cp -r "${item}" "${BUILD_DIR}/"
+          fi
+        done
+        
+        # Copy Windows binary
+        if [ -f "binaries/brush_app_windows.exe" ]; then
+          cp "binaries/brush_app_windows.exe" "${BUILD_DIR}/binaries/"
+          echo "  Added binary: binaries/brush_app_windows.exe"
+        fi
+        
+        # Copy binaries README and .gitkeep
+        [ -f "binaries/README.md" ] && cp "binaries/README.md" "${BUILD_DIR}/binaries/"
+        [ -f "binaries/.gitkeep" ] && cp "binaries/.gitkeep" "${BUILD_DIR}/binaries/"
+        
+        # Create zip
+        cd "${TEMP_DIR}"
+        zip -r "../skysplat_blender_win_${VERSION}.zip" "skysplat_blender" \
+          -x "*.pyc" \
+          -x "*__pycache__*" \
+          -x "*.DS_Store" \
+          -x "*/.git/*"
+        
+        cd ..
+        rm -rf "${TEMP_DIR}"
+        
+        echo "✓ Created skysplat_blender_win_${VERSION}.zip"
+        ls -lh "skysplat_blender_win_${VERSION}.zip"
+    
+    - name: Create Linux archive
+      run: |
+        VERSION="${{ steps.get_version.outputs.version }}"
+        TEMP_DIR="temp_build"
+        BUILD_DIR="${TEMP_DIR}/skysplat_blender"
+        
+        echo "Creating Linux archive..."
+        
+        # Create temp directory
+        mkdir -p "${BUILD_DIR}/binaries"
+        
+        # Copy common files
+        for item in __init__.py .gitattributes .gitignore config.py LICENSE README.md requirements.txt .claude .github docs operators ui utils website; do
+          if [ -e "${item}" ]; then
+            cp -r "${item}" "${BUILD_DIR}/"
+          fi
+        done
+        
+        # Copy Linux binary
+        if [ -f "binaries/brush_app_linux" ]; then
+          cp "binaries/brush_app_linux" "${BUILD_DIR}/binaries/"
+          echo "  Added binary: binaries/brush_app_linux"
+        fi
+        
+        # Copy binaries README and .gitkeep
+        [ -f "binaries/README.md" ] && cp "binaries/README.md" "${BUILD_DIR}/binaries/"
+        [ -f "binaries/.gitkeep" ] && cp "binaries/.gitkeep" "${BUILD_DIR}/binaries/"
+        
+        # Create zip
+        cd "${TEMP_DIR}"
+        zip -r "../skysplat_blender_linux_${VERSION}.zip" "skysplat_blender" \
+          -x "*.pyc" \
+          -x "*__pycache__*" \
+          -x "*.DS_Store" \
+          -x "*/.git/*"
+        
+        cd ..
+        rm -rf "${TEMP_DIR}"
+        
+        echo "✓ Created skysplat_blender_linux_${VERSION}.zip"
+        ls -lh "skysplat_blender_linux_${VERSION}.zip"
+    
+    - name: Create macOS archive
+      run: |
+        VERSION="${{ steps.get_version.outputs.version }}"
+        TEMP_DIR="temp_build"
+        BUILD_DIR="${TEMP_DIR}/skysplat_blender"
+        
+        echo "Creating macOS archive..."
+        
+        # Create temp directory
+        mkdir -p "${BUILD_DIR}/binaries"
+        
+        # Copy common files
+        for item in __init__.py .gitattributes .gitignore config.py LICENSE README.md requirements.txt .claude .github docs operators ui utils website; do
+          if [ -e "${item}" ]; then
+            cp -r "${item}" "${BUILD_DIR}/"
+          fi
+        done
+        
+        # Copy macOS binary
+        if [ -f "binaries/brush_app_mac" ]; then
+          cp "binaries/brush_app_mac" "${BUILD_DIR}/binaries/"
+          echo "  Added binary: binaries/brush_app_mac"
+        fi
+        
+        # Copy binaries README and .gitkeep
+        [ -f "binaries/README.md" ] && cp "binaries/README.md" "${BUILD_DIR}/binaries/"
+        [ -f "binaries/.gitkeep" ] && cp "binaries/.gitkeep" "${BUILD_DIR}/binaries/"
+        
+        # Create zip
+        cd "${TEMP_DIR}"
+        zip -r "../skysplat_blender_mac_${VERSION}.zip" "skysplat_blender" \
+          -x "*.pyc" \
+          -x "*__pycache__*" \
+          -x "*.DS_Store" \
+          -x "*/.git/*"
+        
+        cd ..
+        rm -rf "${TEMP_DIR}"
+        
+        echo "✓ Created skysplat_blender_mac_${VERSION}.zip"
+        ls -lh "skysplat_blender_mac_${VERSION}.zip"
+    
+    - name: Verify all archives
+      run: |
+        VERSION="${{ steps.get_version.outputs.version }}"
+        echo "All release archives created:"
+        ls -lh skysplat_blender*_${VERSION}.zip
+    
+    - name: Create Release and Upload Assets
+      uses: softprops/action-gh-release@v2
+      with:
+        files: |
+          skysplat_blender_${{ steps.get_version.outputs.version }}.zip
+          skysplat_blender_win_${{ steps.get_version.outputs.version }}.zip
+          skysplat_blender_linux_${{ steps.get_version.outputs.version }}.zip
+          skysplat_blender_mac_${{ steps.get_version.outputs.version }}.zip
+        generate_release_notes: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ github.event.release.upload_url }}
-        asset_path: ./skysplat_blender.zip
-        asset_name: skysplat_blender.zip
-        asset_content_type: application/zip
