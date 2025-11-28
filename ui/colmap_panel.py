@@ -81,99 +81,95 @@ def get_default_colmap_path():
     
     return ""
 
+# Cache for COLMAP options to avoid repeated subprocess calls
+_colmap_options_cache = {}
+
 def get_colmap_version_and_options(colmap_path):
-    """Get COLMAP version and determine appropriate option syntax"""
-    try:
-        # Try to get version info from help command
-        result = subprocess.run(
-            f'"{colmap_path}" help' if colmap_path else "colmap help",
-            shell=True,
-            capture_output=True,
-            text=True,
-            timeout=10
-        )
-        
-        if result.returncode == 0 and result.stdout:
-            # Parse version from output like "COLMAP 3.13.0.dev0"
-            import re
-            version_match = re.search(r'COLMAP\s+(\d+)\.(\d+)\.(\d+)', result.stdout)
-            if version_match:
-                major, minor, patch = map(int, version_match.groups())
-                
-                # Determine option syntax based on version
-                # COLMAP 3.13+ uses FeatureExtraction.use_gpu and FeatureMatching.use_gpu
-                # COLMAP 3.12 and earlier use SiftExtraction.use_gpu and SiftMatching.use_gpu
-                if major > 3 or (major == 3 and minor >= 13):
-                    return {
-                        'feature_gpu_option': 'FeatureExtraction.use_gpu',
-                        'matching_gpu_option': 'FeatureMatching.use_gpu',
-                        'version': f"{major}.{minor}.{patch}",
-                        'is_new_version': True
-                    }
-                else:
-                    return {
-                        'feature_gpu_option': 'SiftExtraction.use_gpu',
-                        'matching_gpu_option': 'SiftMatching.use_gpu',
-                        'version': f"{major}.{minor}.{patch}",
-                        'is_new_version': False
-                    }
-    except Exception as e:
-        logger.warning(f"Could not determine COLMAP version: {e}")
+    """
+    Detect COLMAP option syntax by parsing help output.
     
-    # Fallback: Try to detect by testing feature_extractor and sequential_matcher help
-    try:
-        result = subprocess.run(
-            f'"{colmap_path}" feature_extractor --help' if colmap_path else "colmap feature_extractor --help",
-            shell=True,
-            capture_output=True,
-            text=True,
-            timeout=10
-        )
-        
-        is_new_version = False
+    Uses dynamic detection instead of hard-coded version checks for better
+    forward compatibility with future COLMAP versions.
+    """
+    global _colmap_options_cache
+    
+    # Check cache first
+    cache_key = colmap_path or "colmap"
+    if cache_key in _colmap_options_cache:
+        return _colmap_options_cache[cache_key]
+    
+    colmap_command = f'"{colmap_path}"' if colmap_path else "colmap"
+    
+    # Default options (will be updated based on detection)
+    feature_gpu_option = None
+    matching_gpu_option = None
+    version_string = "unknown"
+    
+    # Helper function to get combined stdout+stderr from command
+    def get_help_output(cmd):
+        try:
+            result = subprocess.run(
+                cmd,
+                shell=True,
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            # COLMAP may write help to stdout or stderr, so combine both
+            combined_output = (result.stdout or "") + (result.stderr or "")
+            return combined_output if result.returncode == 0 else ""
+        except Exception as e:
+            logger.debug(f"Command '{cmd}' failed: {e}")
+            return ""
+    
+    # Try to get version string (for logging purposes only, not for logic)
+    help_output = get_help_output(f'{colmap_command} help')
+    if help_output:
+        version_match = re.search(r'COLMAP\s+([\d.]+\S*)', help_output)
+        if version_match:
+            version_string = version_match.group(1)
+    
+    # Detect feature extraction GPU option by parsing help output
+    feature_help = get_help_output(f'{colmap_command} feature_extractor --help')
+    if feature_help:
+        # Check for each possible option in the help output
+        # Order matters: check newer option names first
+        if '--FeatureExtraction.use_gpu' in feature_help:
+            feature_gpu_option = 'FeatureExtraction.use_gpu'
+        elif '--SiftExtraction.use_gpu' in feature_help:
+            feature_gpu_option = 'SiftExtraction.use_gpu'
+    
+    # Detect matching GPU option by parsing sequential_matcher help output
+    matcher_help = get_help_output(f'{colmap_command} sequential_matcher --help')
+    if matcher_help:
+        # Check for each possible option in the help output
+        # Order matters: check newer option names first
+        if '--FeatureMatching.use_gpu' in matcher_help:
+            matching_gpu_option = 'FeatureMatching.use_gpu'
+        elif '--SiftMatching.use_gpu' in matcher_help:
+            matching_gpu_option = 'SiftMatching.use_gpu'
+    
+    # Use sensible defaults if detection failed
+    if feature_gpu_option is None:
+        logger.warning("Could not detect feature GPU option, using 'SiftExtraction.use_gpu' as default")
         feature_gpu_option = 'SiftExtraction.use_gpu'
-        
-        if result.returncode == 0 and result.stdout:
-            if '--FeatureExtraction.use_gpu' in result.stdout:
-                feature_gpu_option = 'FeatureExtraction.use_gpu'
-                is_new_version = True
-        
-        # Also check sequential_matcher for the GPU option
-        result = subprocess.run(
-            f'"{colmap_path}" sequential_matcher --help' if colmap_path else "colmap sequential_matcher --help",
-            shell=True,
-            capture_output=True,
-            text=True,
-            timeout=10
-        )
-        
-        if result.returncode == 0 and result.stdout:
-            # In COLMAP 3.13+, the GPU option is FeatureMatching.use_gpu
-            if '--FeatureMatching.use_gpu' in result.stdout:
-                return {
-                    'feature_gpu_option': feature_gpu_option,
-                    'matching_gpu_option': 'FeatureMatching.use_gpu',
-                    'version': 'unknown (3.13+)',
-                    'is_new_version': True
-                }
-            elif '--SiftMatching.use_gpu' in result.stdout:
-                return {
-                    'feature_gpu_option': feature_gpu_option,
-                    'matching_gpu_option': 'SiftMatching.use_gpu',
-                    'version': 'unknown (3.12-)',
-                    'is_new_version': False
-                }
-    except Exception as e:
-        logger.warning(f"Could not test COLMAP options: {e}")
     
-    # Final fallback - assume newer version (safer default)
-    logger.warning("Using default COLMAP options for version 3.13+")
-    return {
-        'feature_gpu_option': 'FeatureExtraction.use_gpu',
-        'matching_gpu_option': 'FeatureMatching.use_gpu',
-        'version': 'unknown (default)',
-        'is_new_version': True
+    if matching_gpu_option is None:
+        logger.warning("Could not detect matching GPU option, using 'SiftMatching.use_gpu' as default")
+        matching_gpu_option = 'SiftMatching.use_gpu'
+    
+    options = {
+        'feature_gpu_option': feature_gpu_option,
+        'matching_gpu_option': matching_gpu_option,
+        'version': version_string
     }
+    
+    logger.info(f"Detected COLMAP {version_string}: feature GPU option = {feature_gpu_option}, matching GPU option = {matching_gpu_option}")
+    
+    # Cache the result
+    _colmap_options_cache[cache_key] = options
+    
+    return options
 
 def get_default_magick_path():
     """Get default ImageMagick path based on operating system"""
