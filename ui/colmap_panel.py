@@ -101,24 +101,26 @@ def get_colmap_version_and_options(colmap_path):
                 major, minor, patch = map(int, version_match.groups())
                 
                 # Determine option syntax based on version
-                # COLMAP 3.13+ uses FeatureExtraction.use_gpu
-                # COLMAP 3.12 and earlier use SiftExtraction.use_gpu
+                # COLMAP 3.13+ uses FeatureExtraction.use_gpu and FeatureMatching.use_gpu
+                # COLMAP 3.12 and earlier use SiftExtraction.use_gpu and SiftMatching.use_gpu
                 if major > 3 or (major == 3 and minor >= 13):
                     return {
                         'feature_gpu_option': 'FeatureExtraction.use_gpu',
-                        'matching_gpu_option': 'SiftMatching.use_gpu',
-                        'version': f"{major}.{minor}.{patch}"
+                        'matching_gpu_option': 'FeatureMatching.use_gpu',
+                        'version': f"{major}.{minor}.{patch}",
+                        'is_new_version': True
                     }
                 else:
                     return {
                         'feature_gpu_option': 'SiftExtraction.use_gpu',
                         'matching_gpu_option': 'SiftMatching.use_gpu',
-                        'version': f"{major}.{minor}.{patch}"
+                        'version': f"{major}.{minor}.{patch}",
+                        'is_new_version': False
                     }
     except Exception as e:
         logger.warning(f"Could not determine COLMAP version: {e}")
     
-    # Fallback: Try to detect by testing feature_extractor help
+    # Fallback: Try to detect by testing feature_extractor and sequential_matcher help
     try:
         result = subprocess.run(
             f'"{colmap_path}" feature_extractor --help' if colmap_path else "colmap feature_extractor --help",
@@ -128,18 +130,38 @@ def get_colmap_version_and_options(colmap_path):
             timeout=10
         )
         
+        is_new_version = False
+        feature_gpu_option = 'SiftExtraction.use_gpu'
+        
         if result.returncode == 0 and result.stdout:
             if '--FeatureExtraction.use_gpu' in result.stdout:
+                feature_gpu_option = 'FeatureExtraction.use_gpu'
+                is_new_version = True
+        
+        # Also check sequential_matcher for the GPU option
+        result = subprocess.run(
+            f'"{colmap_path}" sequential_matcher --help' if colmap_path else "colmap sequential_matcher --help",
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        
+        if result.returncode == 0 and result.stdout:
+            # In COLMAP 3.13+, the GPU option is FeatureMatching.use_gpu
+            if '--FeatureMatching.use_gpu' in result.stdout:
                 return {
-                    'feature_gpu_option': 'FeatureExtraction.use_gpu',
-                    'matching_gpu_option': 'SiftMatching.use_gpu',
-                    'version': 'unknown (3.13+)'
+                    'feature_gpu_option': feature_gpu_option,
+                    'matching_gpu_option': 'FeatureMatching.use_gpu',
+                    'version': 'unknown (3.13+)',
+                    'is_new_version': True
                 }
-            elif '--SiftExtraction.use_gpu' in result.stdout:
+            elif '--SiftMatching.use_gpu' in result.stdout:
                 return {
-                    'feature_gpu_option': 'SiftExtraction.use_gpu',
+                    'feature_gpu_option': feature_gpu_option,
                     'matching_gpu_option': 'SiftMatching.use_gpu',
-                    'version': 'unknown (3.12-)'
+                    'version': 'unknown (3.12-)',
+                    'is_new_version': False
                 }
     except Exception as e:
         logger.warning(f"Could not test COLMAP options: {e}")
@@ -148,8 +170,9 @@ def get_colmap_version_and_options(colmap_path):
     logger.warning("Using default COLMAP options for version 3.13+")
     return {
         'feature_gpu_option': 'FeatureExtraction.use_gpu',
-        'matching_gpu_option': 'SiftMatching.use_gpu',
-        'version': 'unknown (default)'
+        'matching_gpu_option': 'FeatureMatching.use_gpu',
+        'version': 'unknown (default)',
+        'is_new_version': True
     }
 
 def get_default_magick_path():
