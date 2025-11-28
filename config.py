@@ -8,7 +8,7 @@ import os
 
 # Addon metadata
 ADDON_NAME = "SkySplat: 3DGS Blender Toolkit"
-ADDON_VERSION = "0.3.0"
+ADDON_VERSION = "0.4.1"
 ADDON_AUTHOR = "Kyle Johnson"
 ADDON_DESCRIPTION = "Workflow tools for 3D Gaussian Splatting using Blender, COLMAP, and Brush"
 
@@ -40,9 +40,9 @@ BUNDLED_BINARY_NAMES = {
 
 # Panel versions (for UI display)
 PANEL_VERSIONS = {
-    "video": "0.3.0",
-    "colmap": "0.3.0",
-    "gaussian_splatting": "0.3.0"
+    "video": "0.4.1",
+    "colmap": "0.4.1",
+    "gaussian_splatting": "0.4.1"
 }
 
 def get_addon_directory():

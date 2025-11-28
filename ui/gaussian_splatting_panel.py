@@ -9,7 +9,7 @@ from bpy.props import StringProperty, IntProperty, FloatProperty, BoolProperty, 
 from ..config import BUNDLED_BINARY_NAMES, get_bundled_binaries_directory
 
 # Version for UI display
-PANEL_VERSION = "0.4.0"  # Updated for multi-instance support
+PANEL_VERSION = "0.4.1"  # Updated for multi-instance support
 
 def update_export_path_from_source(self, context):
     """Auto-update export path when source path changes"""
