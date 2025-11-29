@@ -34,7 +34,7 @@ SUPPORTED_IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.tiff', '.bmp'}
 # Bundled binary names
 BUNDLED_BINARY_NAMES = {
     "Windows": "brush_app_windows.exe",
-    "Darwin": "brush_app_macos", 
+    "Darwin": "brush_app_mac", 
     "Linux": "brush_app_linux"
 }
 
