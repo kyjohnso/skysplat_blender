@@ -40,7 +40,10 @@ def get_default_colmap_path():
         possible_paths = [
             os.path.join(os.environ.get('PROGRAMFILES', 'C:\\Program Files'), 'COLMAP', 'COLMAP.exe'),
             os.path.join(os.environ.get('PROGRAMFILES(X86)', 'C:\\Program Files (x86)'), 'COLMAP', 'COLMAP.exe'),
-            os.path.join(os.environ.get('LOCALAPPDATA', 'C:\\Users\\User\\AppData\\Local'), 'COLMAP', 'COLMAP.exe')
+            os.path.join(os.environ.get('LOCALAPPDATA', 'C:\\Users\\User\\AppData\\Local'), 'COLMAP', 'COLMAP.exe'),
+            os.path.join(os.environ.get('PROGRAMFILES', 'C:\\Program Files'), 'COLMAP', 'bin', 'COLMAP.exe'),
+            os.path.join(os.environ.get('PROGRAMFILES(X86)', 'C:\\Program Files (x86)'), 'COLMAP', 'bin', 'COLMAP.exe'),
+            os.path.join(os.environ.get('LOCALAPPDATA', 'C:\\Users\\User\\AppData\\Local'), 'COLMAP', 'bin', 'COLMAP.exe'),
         ]
         for path in possible_paths:
             if os.path.exists(path):
