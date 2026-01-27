@@ -29,6 +29,13 @@ def get_skysplat_props(context):
     else:
         return context.scene.skysplat_props
 
+def is_image_sequence(filepath):
+    """Check if the path is an image sequence vs video file"""
+    image_extensions = {'.png', '.jpg', '.jpeg', '.tiff', '.tif', '.exr', '.bmp', '.dpx', '.hdr'}
+    video_extensions = {'.mp4', '.mov', '.avi', '.mkv', '.webm', '.flv', '.wmv'}
+    ext = os.path.splitext(filepath)[1].lower()
+    return ext in image_extensions
+
 def update_srt_path(self, context):
     """Update SRT path when video path changes"""
     if self.video_path:
@@ -70,8 +77,8 @@ class VideoInstance(bpy.types.PropertyGroup):
     )
     
     video_path: bpy.props.StringProperty(
-        name="Video File",
-        description="Path to the input video",
+        name="Video/Image Sequence",
+        description="Path to video file or first frame of image sequence",
         subtype='FILE_PATH',
         update=update_srt_path
     )
@@ -138,8 +145,8 @@ class SkySplatProperties(bpy.types.PropertyGroup):
     
     # Legacy properties for backward compatibility
     video_path: bpy.props.StringProperty(
-        name="Video File",
-        description="Path to the input video (legacy)",
+        name="Video/Image Sequence",
+        description="Path to video file or first frame of image sequence (legacy)",
         subtype='FILE_PATH',
         update=update_srt_path
     )
@@ -174,8 +181,8 @@ class SkySplatProperties(bpy.types.PropertyGroup):
 
 class SKY_SPLAT_OT_add_video_instance(bpy.types.Operator):
     bl_idname = "skysplat.add_video_instance"
-    bl_label = "Add Video Instance"
-    bl_description = "Add a new video instance"
+    bl_label = "Add Media Instance"
+    bl_description = "Add a new media instance (video or image sequence)"
 
     def execute(self, context):
         # In Blender 5.0+, select the default scene for the video sequencer if not already set
@@ -192,18 +199,18 @@ class SKY_SPLAT_OT_add_video_instance(bpy.types.Operator):
             if context.workspace.sequencer_scene and not context.workspace.sequencer_scene.sequence_editor:
                 context.workspace.sequencer_scene.sequence_editor_create()
 
-        # Now add the video instance (props will be from window scene)
+        # Now add the media instance (props will be from window scene)
         props = get_skysplat_props(context)
         new_instance = props.video_instances.add()
-        new_instance.name = f"Video_{len(props.video_instances)}"
+        new_instance.name = f"Media_{len(props.video_instances)}"
         props.active_video_index = len(props.video_instances) - 1
-        self.report({'INFO'}, f"Added video instance: {new_instance.name}")
+        self.report({'INFO'}, f"Added media instance: {new_instance.name}")
         return {'FINISHED'}
 
 class SKY_SPLAT_OT_remove_video_instance(bpy.types.Operator):
     bl_idname = "skysplat.remove_video_instance"
-    bl_label = "Remove Video Instance"
-    bl_description = "Remove the active video instance"
+    bl_label = "Remove Media Instance"
+    bl_description = "Remove the active media instance"
     
     @classmethod
     def poll(cls, context):
@@ -215,13 +222,13 @@ class SKY_SPLAT_OT_remove_video_instance(bpy.types.Operator):
         if len(props.video_instances) > 0:
             props.video_instances.remove(props.active_video_index)
             props.active_video_index = max(0, props.active_video_index - 1)
-            self.report({'INFO'}, "Removed video instance")
+            self.report({'INFO'}, "Removed media instance")
         return {'FINISHED'}
 
 class SKY_SPLAT_OT_load_video(bpy.types.Operator):
     bl_idname = "skysplat.load_video"
-    bl_label = "Load Video and SRT"
-    bl_description = "Load the video and associated SRT file into the Video Sequencer"
+    bl_label = "Load Video/Images"
+    bl_description = "Load video file or image sequence into the Video Sequencer"
 
     def execute(self, context):
         # Get props from the correct scene (window scene, not sequencer scene)
@@ -229,19 +236,19 @@ class SKY_SPLAT_OT_load_video(bpy.types.Operator):
 
         # Get active video instance
         if len(props.video_instances) == 0:
-            self.report({'ERROR'}, "No video instances. Add a video instance first.")
+            self.report({'ERROR'}, "No media instances. Add a media instance first.")
             return {'CANCELLED'}
 
         video_instance = props.video_instances[props.active_video_index]
 
         # Validate paths
         if not video_instance.video_path:
-            self.report({'ERROR'}, "Please select a video file")
+            self.report({'ERROR'}, "Please select a video file or image sequence")
             return {'CANCELLED'}
 
         video_path = bpy.path.abspath(video_instance.video_path)
         if not os.path.exists(video_path):
-            self.report({'ERROR'}, f"Video file not found: {video_instance.video_path}")
+            self.report({'ERROR'}, f"Media file not found: {video_instance.video_path}")
             return {'CANCELLED'}
 
         # Get the sequencer scene (Blender 5.0 uses workspace.sequencer_scene, fallback to context.scene)
@@ -290,17 +297,29 @@ class SKY_SPLAT_OT_load_video(bpy.types.Operator):
         
         # Use the next channel (or channel 1 if no strips exist)
         next_channel = max_channel + 1 if max_channel > 0 else 1
-        
-        # Add video strip to the next available channel
-        sequences_collection = get_sequences_collection(seq_editor)
-        video_strip = sequences_collection.new_movie(
-            name=os.path.basename(video_path),
-            filepath=video_path,
-            channel=next_channel,
-            frame_start=1
-        )
 
-        self.report({'INFO'}, f"Added strip '{video_strip.name}' to channel {next_channel} in scene '{target_scene.name}'")
+        # Add video or image sequence strip to the next available channel
+        sequences_collection = get_sequences_collection(seq_editor)
+
+        # Determine if this is an image sequence or video
+        if is_image_sequence(video_path):
+            # For image sequences, use new_image which handles frame sequences
+            video_strip = sequences_collection.new_image(
+                name=os.path.basename(video_path),
+                filepath=video_path,
+                channel=next_channel,
+                frame_start=1
+            )
+            self.report({'INFO'}, f"Added image sequence '{video_strip.name}' to channel {next_channel} in scene '{target_scene.name}'")
+        else:
+            # For video files, use new_movie
+            video_strip = sequences_collection.new_movie(
+                name=os.path.basename(video_path),
+                filepath=video_path,
+                channel=next_channel,
+                frame_start=1
+            )
+            self.report({'INFO'}, f"Added video '{video_strip.name}' to channel {next_channel} in scene '{target_scene.name}'")
 
         # Store the channel number in the video instance for reference
         video_instance['sequencer_channel'] = next_channel
@@ -358,8 +377,10 @@ class SKY_SPLAT_OT_load_video(bpy.types.Operator):
             colmap_props.active_colmap_index = len(colmap_props.colmap_instances) - 1
             
             self.report({'INFO'}, f"Auto-created COLMAP instance: {new_colmap.name}")
-        
-        self.report({'INFO'}, f"Loaded video into sequencer: {video_instance.video_path}")
+
+        # Report appropriate message based on media type
+        media_type = "image sequence" if is_image_sequence(video_path) else "video"
+        self.report({'INFO'}, f"Loaded {media_type} into sequencer: {video_instance.video_path}")
         return {'FINISHED'}
 
 class SKY_SPLAT_OT_extract_frames(bpy.types.Operator):
@@ -372,23 +393,44 @@ class SKY_SPLAT_OT_extract_frames(bpy.types.Operator):
         start_time = time.time()
 
         props = get_skysplat_props(context)
-        
+
         # Get active video instance
         if len(props.video_instances) == 0:
-            self.report({'ERROR'}, "No video instances. Add a video instance first.")
+            self.report({'ERROR'}, "No media instances. Add a media instance first.")
             return {'CANCELLED'}
-        
+
         video_instance = props.video_instances[props.active_video_index]
-        
+
         # Validate required fields
         if not video_instance.video_path:
-            self.report({'ERROR'}, "Please load a video first")
+            self.report({'ERROR'}, "Please load media first")
             return {'CANCELLED'}
-            
+
+        video_path = bpy.path.abspath(video_instance.video_path)
+
+        # Check if this is an image sequence
+        if is_image_sequence(video_path):
+            # For image sequences, frames already exist - just set the output folder to the source directory
+            image_dir = os.path.dirname(video_path)
+            video_instance.output_folder = image_dir
+            video_instance.frames_extracted = True
+
+            # Count images in the directory
+            image_files = [f for f in os.listdir(image_dir)
+                          if os.path.splitext(f)[1].lower() in {'.png', '.jpg', '.jpeg', '.tiff', '.tif', '.exr', '.bmp', '.dpx', '.hdr'}]
+
+            self.report({'INFO'}, f"Image sequence detected - using existing {len(image_files)} frames from {image_dir}")
+
+            # Update COLMAP paths to point to the image directory
+            if hasattr(context.scene, 'skysplat_colmap_props'):
+                context.scene.skysplat_colmap_props.update_from_video_panel(context)
+
+            return {'FINISHED'}
+
         if not video_instance.output_folder:
             self.report({'ERROR'}, "Please specify an output folder")
             return {'CANCELLED'}
-            
+
         output_folder = bpy.path.abspath(video_instance.output_folder)
         
         # Create output directory if it doesn't exist
@@ -496,7 +538,7 @@ class SKY_SPLAT_OT_extract_frames(bpy.types.Operator):
         
 
 class SKY_SPLAT_PT_video_panel(bpy.types.Panel):
-    bl_label = "SkySplat Video Loader"
+    bl_label = "SkySplat Media Loader"
     bl_idname = "SKY_SPLAT_PT_video_panel"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
@@ -507,9 +549,9 @@ class SKY_SPLAT_PT_video_panel(bpy.types.Panel):
         layout = self.layout
         props = get_skysplat_props(context)
         
-        # Video instance management
+        # Video/Image instance management
         box = layout.box()
-        box.label(text="Video Instances", icon='SEQUENCE')
+        box.label(text="Media Instances", icon='SEQUENCE')
         
         row = box.row()
         row.template_list("UI_UL_list", "video_instances", props, "video_instances", 
@@ -526,10 +568,20 @@ class SKY_SPLAT_PT_video_panel(bpy.types.Panel):
             # Instance name
             box.prop(video_instance, "name")
             
-            # Video loading section
+            # Video/Image loading section
             box = layout.box()
-            box.label(text="Video & Metadata Files")
+            box.label(text="Video/Images & Metadata")
             box.prop(video_instance, "video_path")
+
+            # Show media type indicator if loaded
+            if video_instance.video_path:
+                video_path = bpy.path.abspath(video_instance.video_path)
+                if os.path.exists(video_path):
+                    if is_image_sequence(video_path):
+                        box.label(text="Type: Image Sequence", icon='IMAGE_DATA')
+                    else:
+                        box.label(text="Type: Video File", icon='FILE_MOVIE')
+
             box.prop(video_instance, "srt_path")
             
             row = box.row()
@@ -539,7 +591,7 @@ class SKY_SPLAT_PT_video_panel(bpy.types.Panel):
             
             # Frame extraction section
             box = layout.box()
-            box.label(text="Frame Extraction")
+            box.label(text="Frame Extraction (Videos Only)")
             
             row = box.row(align=True)
             row.prop(video_instance, "frame_start")
@@ -555,10 +607,10 @@ class SKY_SPLAT_PT_video_panel(bpy.types.Panel):
             
             # Info about shared paths
             box = layout.box()
-            box.label(text="💡 Tip: Multiple videos can share the same", icon='INFO')
-            box.label(text="output folder for combined COLMAP processing")
+            box.label(text="💡 Tip: Multiple media sources can share", icon='INFO')
+            box.label(text="the same output folder for combined processing")
         else:
-            box.label(text="Add a video instance to begin", icon='INFO')
+            box.label(text="Add a media instance to begin", icon='INFO')
 
         # Version indicator at the bottom
         row = layout.row()
