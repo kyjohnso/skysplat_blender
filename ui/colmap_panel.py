@@ -453,10 +453,35 @@ class SKY_SPLAT_OT_remove_colmap_instance(bpy.types.Operator):
         return {'FINISHED'}
 
 
+def _get_colmap_env(command):
+    """Build environment with Qt plugin path for COLMAP on Windows"""
+    if platform.system() != "Windows":
+        return None
+
+    # Extract the colmap executable path from the command string
+    # Commands are formatted as: '"C:\path\to\colmap.exe" subcommand ...'
+    colmap_path = None
+    if command.startswith('"'):
+        end_quote = command.find('"', 1)
+        if end_quote > 0:
+            colmap_path = command[1:end_quote]
+
+    if not colmap_path or not os.path.isfile(colmap_path):
+        return None
+
+    colmap_dir = os.path.dirname(colmap_path)
+    env = os.environ.copy()
+    env["QT_PLUGIN_PATH"] = colmap_dir
+    env["PATH"] = colmap_dir + os.pathsep + env.get("PATH", "")
+    return env
+
+
 def run_command(command, cwd=None):
     """Run a command and log its output"""
     logger.info(f"Running command: {command}")
-    
+
+    env = _get_colmap_env(command)
+
     try:
         result = subprocess.run(
             command,
@@ -465,7 +490,8 @@ def run_command(command, cwd=None):
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             universal_newlines=True,
-            cwd=cwd
+            cwd=cwd,
+            env=env
         )
         
         # Log both stdout and stderr - COLMAP often writes important info to stderr
