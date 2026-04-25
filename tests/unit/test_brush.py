@@ -1,9 +1,11 @@
 """Tests for services/brush.py — Brush dataset preparation."""
 from pathlib import Path
+import subprocess
+from unittest.mock import patch, MagicMock
 
 import pytest
 
-from services.brush import prepare_dataset
+from services.brush import prepare_dataset, run_training
 from services.errors import BrushError
 
 
@@ -120,3 +122,15 @@ class TestBuildCommand:
         cmd = build_command(params)
         assert "--max-frames" in cmd and "100" in cmd
         assert "--eval-split-every" in cmd and "10" in cmd
+
+
+class TestRunTraining:
+    def test_returns_popen_handle(self, tmp_path):
+        params = BrushParams(executable="brush", source_path="/d")
+        fake_popen = MagicMock(spec=subprocess.Popen)
+        with patch("services.brush.subprocess.Popen", return_value=fake_popen) as p:
+            result = run_training(params, tmp_path / "log")
+        assert result is fake_popen
+        # First positional arg of Popen is the command list
+        cmd = p.call_args.args[0]
+        assert cmd[0] == "brush"

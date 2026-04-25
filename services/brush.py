@@ -186,3 +186,25 @@ def build_command(params: BrushParams) -> list:
     if params.export_name != "export_{iter}.ply":
         cmd += ["--export-name", params.export_name]
     return cmd
+
+
+def run_training(
+    params: BrushParams,
+    log_path: Path,
+) -> subprocess.Popen:
+    """Launch Brush training as a subprocess. Returns the Popen handle.
+
+    Caller is responsible for polling `popen.poll()` and `popen.wait()`.
+    Stdout and stderr are tee'd to log_path.
+    """
+    log_path = Path(log_path)
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    cmd = build_command(params)
+    log = open(log_path, "w")
+    return subprocess.Popen(
+        cmd,
+        stdout=log,
+        stderr=subprocess.STDOUT,
+        bufsize=1,
+        universal_newlines=True,
+    )
