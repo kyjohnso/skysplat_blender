@@ -278,35 +278,15 @@ class SKY_SPLAT_OT_load_video(bpy.types.Operator):
             target_scene = context.scene
             self.report({'INFO'}, f"Using context.scene: {target_scene.name}")
 
-        # Set up the Video Sequencer
-        if not target_scene.sequence_editor:
-            target_scene.sequence_editor_create()
+        from ..services.video import load_video_into_vse
+        video_path = Path(bpy.path.abspath(video_instance.video_path))
+        strip_name = os.path.basename(str(video_path))
+        video_strip = load_video_into_vse(target_scene, video_path, strip_name=strip_name)
 
-        seq_editor = target_scene.sequence_editor
-        
-        # Find the next available channel
-        # Check all existing strips to find the highest channel in use
-        max_channel = 0
-        for strip in get_all_sequences(seq_editor):
-            if strip.channel > max_channel:
-                max_channel = strip.channel
-        
-        # Use the next channel (or channel 1 if no strips exist)
-        next_channel = max_channel + 1 if max_channel > 0 else 1
-        
-        # Add video strip to the next available channel
-        sequences_collection = get_sequences_collection(seq_editor)
-        video_strip = sequences_collection.new_movie(
-            name=os.path.basename(video_path),
-            filepath=video_path,
-            channel=next_channel,
-            frame_start=1
-        )
-
-        self.report({'INFO'}, f"Added strip '{video_strip.name}' to channel {next_channel} in scene '{target_scene.name}'")
+        self.report({'INFO'}, f"Added strip '{video_strip.name}' to channel {video_strip.channel} in scene '{target_scene.name}'")
 
         # Store the channel number in the video instance for reference
-        video_instance['sequencer_channel'] = next_channel
+        video_instance['sequencer_channel'] = video_strip.channel
 
         # Auto-set scene frame range to match video
         target_scene.frame_start = 1
