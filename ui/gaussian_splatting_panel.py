@@ -549,77 +549,39 @@ class SKY_SPLAT_OT_run_brush_training(Operator):
             return {'CANCELLED'}
     
     def build_brush_command(self, props, splat_instance):
-        """Build the complete command to run Brush training"""
-        cmd = [props.brush_executable]
-        
-        # Add source path as positional argument
-        if splat_instance.source_path:
-            cmd.append(splat_instance.source_path)
-        
-        # Training options
-        cmd.extend([
-            "--total-steps", str(splat_instance.total_steps),
-            "--ssim-weight", str(splat_instance.ssim_weight),
-            "--lr-mean", str(splat_instance.lr_mean),
-            "--lr-mean-end", str(splat_instance.lr_mean_end),
-            "--lr-coeffs-dc", str(splat_instance.lr_coeffs_dc),
-            "--lr-opac", str(splat_instance.lr_opac),
-            "--lr-scale", str(splat_instance.lr_scale),
-            "--lr-rotation", str(splat_instance.lr_rotation)
-        ])
-        
-        # Dataset options
-        cmd.extend([
-            "--max-resolution", str(splat_instance.max_resolution),
-            "--subsample-frames", str(splat_instance.subsample_frames),
-            "--subsample-points", str(splat_instance.subsample_points)
-        ])
-        
-        if splat_instance.max_frames > 0:
-            cmd.extend(["--max-frames", str(splat_instance.max_frames)])
-        
-        if splat_instance.eval_split_every > 0:
-            cmd.extend(["--eval-split-every", str(splat_instance.eval_split_every)])
-        
-        # Refine options
-        cmd.extend([
-            "--refine-every", str(splat_instance.refine_every),
-            "--growth-grad-threshold", str(splat_instance.growth_grad_threshold),
-            "--growth-select-fraction", str(splat_instance.growth_select_fraction),
-            "--growth-stop-iter", str(splat_instance.growth_stop_iter),
-            "--max-splats", str(splat_instance.max_splats)
-        ])
-        
-        # Model options
-        cmd.extend([
-            "--sh-degree", str(splat_instance.sh_degree)
-        ])
-        
-        # Process options
-        cmd.extend([
-            "--eval-every", str(splat_instance.eval_every),
-            "--export-every", str(splat_instance.export_every),
-            "--seed", str(splat_instance.seed)
-        ])
-        
-        if splat_instance.start_iter > 0:
-            cmd.extend(["--start-iter", str(splat_instance.start_iter)])
-        
-        # Optional flags
-        if splat_instance.with_viewer:
-            cmd.append("--with-viewer")
-        
-        if splat_instance.eval_save_to_disk:
-            cmd.append("--eval-save-to-disk")
-        
-        # Export settings
-        if splat_instance.export_path:
-            cmd.extend(["--export-path", splat_instance.export_path])
-        
-        if splat_instance.export_name != "export_{iter}.ply":
-            cmd.extend(["--export-name", splat_instance.export_name])
-        
-        return cmd
+        from ..services.brush import BrushParams, build_command
+        params = BrushParams(
+            executable=props.brush_executable,
+            source_path=splat_instance.source_path,
+            export_path=splat_instance.export_path,
+            export_name=splat_instance.export_name,
+            total_steps=splat_instance.total_steps,
+            ssim_weight=splat_instance.ssim_weight,
+            lr_mean=splat_instance.lr_mean,
+            lr_mean_end=splat_instance.lr_mean_end,
+            lr_coeffs_dc=splat_instance.lr_coeffs_dc,
+            lr_opac=splat_instance.lr_opac,
+            lr_scale=splat_instance.lr_scale,
+            lr_rotation=splat_instance.lr_rotation,
+            max_resolution=splat_instance.max_resolution,
+            subsample_frames=splat_instance.subsample_frames,
+            subsample_points=splat_instance.subsample_points,
+            max_frames=splat_instance.max_frames,
+            eval_split_every=splat_instance.eval_split_every,
+            refine_every=splat_instance.refine_every,
+            growth_grad_threshold=splat_instance.growth_grad_threshold,
+            growth_select_fraction=splat_instance.growth_select_fraction,
+            growth_stop_iter=splat_instance.growth_stop_iter,
+            max_splats=splat_instance.max_splats,
+            sh_degree=splat_instance.sh_degree,
+            eval_every=splat_instance.eval_every,
+            export_every=splat_instance.export_every,
+            seed=splat_instance.seed,
+            start_iter=splat_instance.start_iter,
+            with_viewer=splat_instance.with_viewer,
+            eval_save_to_disk=splat_instance.eval_save_to_disk,
+        )
+        return build_command(params)
     
     def run_training(self, command, splat_instance):
         """Run the training process"""
