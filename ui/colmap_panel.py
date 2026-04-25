@@ -3,11 +3,8 @@ import bpy
 import os
 import shutil
 import subprocess
-import tempfile
 import logging
 import platform
-import sys
-import json
 import time
 import re
 from pathlib import Path
@@ -15,8 +12,6 @@ from pathlib import Path
 import numpy as np
 import mathutils
 import math
-import sqlite3
-import struct
 from mathutils import Matrix, Vector
 
 # Use relative import to get functions from utils directory
@@ -77,48 +72,6 @@ def get_default_colmap_path():
         possible_paths = [
             "/usr/bin/colmap",
             "/usr/local/bin/colmap"
-        ]
-        for path in possible_paths:
-            if os.path.exists(path):
-                return path
-        return ""
-    
-    return ""
-
-def get_default_magick_path():
-    """Get default ImageMagick path based on operating system"""
-    system = platform.system()
-    
-    if system == "Windows":
-        # Common installation paths on Windows
-        possible_paths = [
-            os.path.join(os.environ.get('PROGRAMFILES', 'C:\\Program Files'), 'ImageMagick-7.0.10-Q16', 'magick.exe'),
-            os.path.join(os.environ.get('PROGRAMFILES', 'C:\\Program Files'), 'ImageMagick', 'magick.exe'),
-            os.path.join(os.environ.get('PROGRAMFILES(X86)', 'C:\\Program Files (x86)'), 'ImageMagick-7.0.10-Q16', 'magick.exe'),
-            os.path.join(os.environ.get('PROGRAMFILES(X86)', 'C:\\Program Files (x86)'), 'ImageMagick', 'magick.exe')
-        ]
-        for path in possible_paths:
-            if os.path.exists(path):
-                return path
-        return ""
-    
-    elif system == "Darwin" or system == "Linux":
-        # Try to find convert/magick in PATH on macOS/Linux
-        commands = ["magick", "convert"]  # ImageMagick 7 uses 'magick', older versions use 'convert'
-        for cmd in commands:
-            try:
-                result = subprocess.run(["which", cmd], capture_output=True, text=True, check=False)
-                if result.returncode == 0:
-                    return result.stdout.strip()
-            except:
-                pass
-        
-        # Common installation paths
-        possible_paths = [
-            "/usr/bin/magick",
-            "/usr/local/bin/magick",
-            "/usr/bin/convert",
-            "/usr/local/bin/convert"
         ]
         for path in possible_paths:
             if os.path.exists(path):
@@ -363,130 +316,6 @@ class SKY_SPLAT_OT_remove_colmap_instance(bpy.types.Operator):
             self.report({'INFO'}, "Removed COLMAP instance")
         return {'FINISHED'}
 
-
-def run_command(command, cwd=None):
-    """Run a command and log its output"""
-    logger.info(f"Running command: {command}")
-    
-    try:
-        result = subprocess.run(
-            command,
-            shell=True,
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            universal_newlines=True,
-            cwd=cwd
-        )
-        
-        # Log both stdout and stderr - COLMAP often writes important info to stderr
-        if result.stdout.strip():
-            logger.info(f"Command stdout: {result.stdout.strip()}")
-        else:
-            logger.info("Command stdout: (empty)")
-            
-        if result.stderr.strip():
-            logger.info(f"Command stderr: {result.stderr.strip()}")
-        else:
-            logger.info("Command stderr: (empty)")
-            
-        return 0  # Success
-    except subprocess.CalledProcessError as e:
-        logger.error(f"Command failed with return code {e.returncode}: {e}")
-        if e.stdout and e.stdout.strip():
-            logger.error(f"Failed command stdout: {e.stdout.strip()}")
-        if e.stderr and e.stderr.strip():
-            logger.error(f"Failed command stderr: {e.stderr.strip()}")
-        return e.returncode
-
-
-def inspect_colmap_database(database_path):
-    """Inspect COLMAP database to diagnose feature extraction and matching issues"""
-    if not os.path.exists(database_path):
-        logger.error(f"Database not found: {database_path}")
-        return
-    
-    try:
-        conn = sqlite3.connect(database_path)
-        cursor = conn.cursor()
-        
-        # Check images table
-        cursor.execute("SELECT COUNT(*) FROM images")
-        image_count = cursor.fetchone()[0]
-        logger.info(f"Database contains {image_count} images")
-        
-        # Check keypoints table
-        cursor.execute("SELECT COUNT(*) FROM keypoints")
-        keypoint_count = cursor.fetchone()[0]
-        logger.info(f"Database contains {keypoint_count} keypoint entries")
-        
-        # Check matches table
-        cursor.execute("SELECT COUNT(*) FROM matches")
-        match_count = cursor.fetchone()[0]
-        logger.info(f"Database contains {match_count} image pair matches")
-        
-        # Get detailed keypoint info per image
-        cursor.execute("""
-            SELECT images.name, keypoints.rows, keypoints.cols
-            FROM images
-            LEFT JOIN keypoints ON images.image_id = keypoints.image_id
-        """)
-        keypoint_details = cursor.fetchall()
-        
-        for name, rows, cols in keypoint_details:
-            if rows is not None and cols is not None:
-                feature_count = rows
-                logger.info(f"Image '{name}': {feature_count} features detected")
-            else:
-                logger.warning(f"Image '{name}': No features detected!")
-        
-        # Check for successful matches
-        if match_count > 0:
-            cursor.execute("SELECT COUNT(*) FROM matches WHERE rows > 0")
-            successful_matches = cursor.fetchone()[0]
-            logger.info(f"Successful matches: {successful_matches}/{match_count}")
-        
-        conn.close()
-        
-    except Exception as e:
-        logger.error(f"Failed to inspect database: {e}")
-
-def validate_input_images(input_path):
-    """Validate input images and report potential issues"""
-    if not os.path.exists(input_path):
-        logger.error(f"Input path does not exist: {input_path}")
-        return False
-    
-    image_files = [f for f in os.listdir(input_path)
-                   if f.lower().endswith(('.jpg', '.png', '.jpeg'))]
-    
-    logger.info(f"Found {len(image_files)} images in input directory")
-    
-    if len(image_files) < 3:
-        logger.warning(f"Very few images ({len(image_files)}) - need at least 3 for reconstruction")
-        return False
-    
-    # Check image sizes and report any inconsistencies
-    try:
-        from PIL import Image
-        sizes = []
-        for img_file in image_files[:10]:  # Check first 10 images
-            img_path = os.path.join(input_path, img_file)
-            with Image.open(img_path) as img:
-                sizes.append(img.size)
-        
-        unique_sizes = list(set(sizes))
-        if len(unique_sizes) > 1:
-            logger.warning(f"Mixed image sizes detected: {unique_sizes}")
-        else:
-            logger.info(f"All images have consistent size: {unique_sizes[0]}")
-            
-    except ImportError:
-        logger.info("PIL not available - skipping image size validation")
-    except Exception as e:
-        logger.warning(f"Could not validate image sizes: {e}")
-    
-    return True
 
 class SKY_SPLAT_OT_run_colmap(bpy.types.Operator):
     bl_idname = "skysplat.run_colmap"
