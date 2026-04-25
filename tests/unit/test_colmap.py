@@ -42,7 +42,7 @@ from unittest.mock import patch, MagicMock
 
 from services.colmap import (
     run_reconstruction, FramesSource, ColmapParams, ColmapResult, Auto, Manual,
-    ColmapModel,
+    ColmapModel, merge_models,
 )
 
 
@@ -112,3 +112,26 @@ class TestRunReconstruction:
             )
         # All images attributed to "north"
         assert all(v == "north" for v in result.source_map.values())
+
+
+class TestMergeModels:
+    def test_invokes_model_merger_subcommand(self, tmp_path):
+        a = tmp_path / "a"
+        b = tmp_path / "b"
+        out = tmp_path / "out"
+        a.mkdir(); b.mkdir()
+        with patch("services.colmap.subprocess.run") as run_mock:
+            run_mock.return_value = MagicMock(returncode=0, stdout="", stderr="")
+            result = merge_models(a, b, out, log_path=tmp_path / "log")
+        cmd = run_mock.call_args.args[0]
+        assert cmd[1] == "model_merger"
+        assert "--input_path1" in cmd
+        assert "--input_path2" in cmd
+        assert result == out
+
+    def test_raises_on_failure(self, tmp_path):
+        a = tmp_path / "a"; b = tmp_path / "b"; a.mkdir(); b.mkdir()
+        with patch("services.colmap.subprocess.run") as run_mock:
+            run_mock.return_value = MagicMock(returncode=1, stdout="", stderr="boom")
+            with pytest.raises(ColmapError):
+                merge_models(a, b, tmp_path / "out", log_path=tmp_path / "log")
