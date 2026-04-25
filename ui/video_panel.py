@@ -376,106 +376,28 @@ class SKY_SPLAT_OT_extract_frames(bpy.types.Operator):
         
         # Create output directory if it doesn't exist
         os.makedirs(output_folder, exist_ok=True)
-        
-        # Store original render settings to restore later
-        original_path = context.scene.render.filepath
-        original_file_format = context.scene.render.image_settings.file_format
-        original_color_mode = context.scene.render.image_settings.color_mode
-        original_frame_start = context.scene.frame_start
-        original_frame_end = context.scene.frame_end
-        original_frame_step = context.scene.frame_step
-        original_res_x = context.scene.render.resolution_x
-        original_res_y = context.scene.render.resolution_y
-        original_res_pct = context.scene.render.resolution_percentage
-        
-        try:
-            # Store original mute states and find the target video strip
-            original_mute_states = {}
-            target_strip = None
-            video_path = bpy.path.abspath(video_instance.video_path)
-            video_filename = os.path.basename(video_path)
-            
-            if context.scene.sequence_editor:
-                # First pass: find the target strip and store all mute states
-                for seq in get_all_sequences(context.scene.sequence_editor):
-                    if seq.type == 'MOVIE':
-                        original_mute_states[seq.name] = seq.mute
-                        # Match by filename to find our target strip
-                        if seq.name == video_filename or seq.filepath == video_path:
-                            target_strip = seq
 
-                # Second pass: mute all video strips except the target
-                for seq in get_all_sequences(context.scene.sequence_editor):
-                    if seq.type == 'MOVIE':
-                        if seq == target_strip:
-                            seq.mute = False  # Ensure target is unmuted
-                        else:
-                            seq.mute = True  # Mute all others
-                
-                # Set render resolution based on target strip
-                if target_strip:
-                    context.scene.render.resolution_x = target_strip.elements[0].orig_width
-                    context.scene.render.resolution_y = target_strip.elements[0].orig_height
-                    context.scene.render.resolution_percentage = 100
-                    self.report({'INFO'}, f"Set render resolution to {target_strip.elements[0].orig_width}x{target_strip.elements[0].orig_height}")
-                    self.report({'INFO'}, f"Extracting frames from: {target_strip.name}")
-            
-            # Setup render settings
-            context.scene.render.filepath = os.path.join(output_folder, "frame_")
-            context.scene.render.image_settings.file_format = 'PNG'
-            context.scene.render.image_settings.color_mode = 'RGB'
-            
-            # Set frame range based on user input
-            context.scene.frame_start = video_instance.frame_start
-            context.scene.frame_end = video_instance.frame_end
-            context.scene.frame_step = video_instance.frame_step
-            
-            # Render the animation frames
-            bpy.ops.render.opengl(animation=True, sequencer=True)
-            
-            # Count extracted frames
-            frame_count = len([f for f in os.listdir(output_folder) if f.endswith('.png')])
-            
-            # Mark frames as extracted
+        try:
+            from ..services.frames import extract_frames
+            video_path = Path(bpy.path.abspath(video_instance.video_path))
+            video_filename = os.path.basename(str(video_path))
+            count = extract_frames(
+                context.scene,
+                video_strip_name=video_filename,
+                out_dir=Path(output_folder),
+                start=video_instance.frame_start,
+                end=video_instance.frame_end,
+                step=video_instance.frame_step,
+            )
             video_instance.frames_extracted = True
-            
-            # Open the output folder
             bpy.ops.wm.path_open(filepath=output_folder)
-            
-            # Calculate and print timing
-            end_time = time.time()
-            total_time = end_time - start_time
-            print(f"Frame extraction completed in {total_time:.2f} seconds")
-            
-            self.report({'INFO'}, f"Successfully extracted {frame_count} frames to {output_folder}")
-            
-            # After successful extraction, update COLMAP paths
+            self.report({'INFO'}, f"Successfully extracted {count} frames to {output_folder}")
             if hasattr(context.scene, 'skysplat_colmap_props'):
                 context.scene.skysplat_colmap_props.update_from_video_panel(context)
-
             return {'FINISHED'}
-            
         except Exception as e:
             self.report({'ERROR'}, f"Error: {str(e)}")
             return {'CANCELLED'}
-            
-        finally:
-            # Restore original mute states for all video strips
-            if context.scene.sequence_editor:
-                for seq in get_all_sequences(context.scene.sequence_editor):
-                    if seq.type == 'MOVIE' and seq.name in original_mute_states:
-                        seq.mute = original_mute_states[seq.name]
-            
-            # Restore original render settings
-            context.scene.render.filepath = original_path
-            context.scene.render.image_settings.file_format = original_file_format
-            context.scene.render.image_settings.color_mode = original_color_mode
-            context.scene.frame_start = original_frame_start
-            context.scene.frame_end = original_frame_end
-            context.scene.frame_step = original_frame_step
-            context.scene.render.resolution_x = original_res_x
-            context.scene.render.resolution_y = original_res_y
-            context.scene.render.resolution_percentage = original_res_pct
         
 
 class SKY_SPLAT_PT_video_panel(bpy.types.Panel):
