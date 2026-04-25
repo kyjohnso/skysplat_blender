@@ -10,3 +10,5 @@ target/
 releases
 
 .superpowers/
+.pytest_cache/
+tests/__pycache__/
