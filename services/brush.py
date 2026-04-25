@@ -10,7 +10,6 @@ import platform
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Iterable
 
 from .errors import BrushError
 
@@ -196,6 +195,12 @@ def run_training(
 
     Caller is responsible for polling `popen.poll()` and `popen.wait()`.
     Stdout and stderr are tee'd to log_path.
+
+    Note: the existing sidebar operator (SKY_SPLAT_OT_run_brush_training)
+    manages its own subprocess.Popen inline because Blender modal
+    operators need fine-grained control over thread lifetime. This
+    entry point exists for the phase 2 bake walker, which evaluates
+    nodes outside a modal-operator context.
     """
     log_path = Path(log_path)
     log_path.parent.mkdir(parents=True, exist_ok=True)

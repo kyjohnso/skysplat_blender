@@ -6,11 +6,10 @@ Subprocess parts (Stage B): run_reconstruction, merge_models.
 from __future__ import annotations
 
 import logging
-import os
 import re
 import shutil
 import subprocess
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
@@ -312,14 +311,17 @@ def run_reconstruction(
     )
 
 
-def merge_models(model_a: Path, model_b: Path, output_dir: Path, log_path: Path) -> Path:
+def merge_models(
+    model_a: Path, model_b: Path, output_dir: Path, log_path: Path,
+    *, colmap_executable: str = "colmap",
+) -> Path:
     """Run `colmap model_merger` to fuse two sparse models."""
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     log_path = Path(log_path)
     with open(log_path, "w") as log:
         _run_colmap_step(
-            log, "colmap", "model_merger",
+            log, colmap_executable, "model_merger",
             "--input_path1", str(model_a),
             "--input_path2", str(model_b),
             "--output_path", str(output_dir),
