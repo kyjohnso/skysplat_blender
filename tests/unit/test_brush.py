@@ -1,0 +1,80 @@
+"""Tests for services/brush.py — Brush dataset preparation."""
+from pathlib import Path
+
+import pytest
+
+from services.brush import prepare_dataset
+from services.errors import BrushError
+
+
+def _write_sparse_model(sparse_dir: Path):
+    sparse_dir.mkdir(parents=True, exist_ok=True)
+    (sparse_dir / "cameras.bin").write_bytes(b"\x00")
+    (sparse_dir / "images.bin").write_bytes(b"\x00")
+    (sparse_dir / "points3D.bin").write_bytes(b"\x00")
+
+
+def _write_images(images_dir: Path, count: int = 3):
+    images_dir.mkdir(parents=True, exist_ok=True)
+    for i in range(count):
+        (images_dir / f"frame_{i:03d}.png").write_bytes(b"\x89PNG\r\n")
+    (images_dir / "notes.txt").write_text("ignored")
+
+
+class TestPrepareDataset:
+    def test_creates_target_layout(self, tmp_path):
+        sparse = tmp_path / "in_sparse"
+        images = tmp_path / "in_images"
+        out = tmp_path / "out"
+        _write_sparse_model(sparse)
+        _write_images(images)
+
+        result = prepare_dataset(sparse, images, out)
+
+        assert result == out
+        assert (out / "sparse" / "0" / "cameras.bin").exists()
+        assert (out / "sparse" / "0" / "images.bin").exists()
+        assert (out / "sparse" / "0" / "points3D.bin").exists()
+        # images directory exists (either symlink or copy)
+        assert (out / "images").exists()
+
+    def test_copies_images_when_force_copy(self, tmp_path):
+        sparse = tmp_path / "in_sparse"
+        images = tmp_path / "in_images"
+        out = tmp_path / "out"
+        _write_sparse_model(sparse)
+        _write_images(images)
+
+        prepare_dataset(sparse, images, out, force_copy=True)
+
+        # All png files copied, txt files filtered
+        copied = sorted((out / "images").glob("*.png"))
+        assert len(copied) == 3
+        assert not (out / "images" / "notes.txt").exists()
+
+    def test_falls_back_to_txt_files_for_sparse(self, tmp_path):
+        sparse = tmp_path / "in_sparse"
+        sparse.mkdir(parents=True)
+        # Only .txt versions present
+        (sparse / "cameras.txt").write_text("# comment")
+        (sparse / "images.txt").write_text("# comment")
+        (sparse / "points3D.txt").write_text("# comment")
+        images = tmp_path / "in_images"
+        _write_images(images, 1)
+        out = tmp_path / "out"
+
+        prepare_dataset(sparse, images, out, force_copy=True)
+
+        assert (out / "sparse" / "0" / "cameras.txt").exists()
+
+    def test_raises_when_sparse_missing(self, tmp_path):
+        with pytest.raises(BrushError):
+            prepare_dataset(
+                tmp_path / "missing", tmp_path / "imgs", tmp_path / "out"
+            )
+
+    def test_raises_when_images_missing(self, tmp_path):
+        sparse = tmp_path / "sparse"
+        _write_sparse_model(sparse)
+        with pytest.raises(BrushError):
+            prepare_dataset(sparse, tmp_path / "missing", tmp_path / "out")

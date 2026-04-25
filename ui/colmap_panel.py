@@ -10,6 +10,7 @@ import sys
 import json
 import time
 import re
+from pathlib import Path
 
 import numpy as np
 import mathutils
@@ -793,73 +794,26 @@ class SKY_SPLAT_OT_prepare_brush_dataset(bpy.types.Operator):
             # Define paths
             export_path = colmap_instance.model_export_path
             images_path = colmap_instance.images_path
-            
+
             # Determine source sparse model path
             transformed_sparse_src = os.path.join(export_path, "sparse", "0")
             if not os.path.exists(transformed_sparse_src):
-                # Model files might be directly in export path
                 transformed_sparse_src = export_path
-            
-            # Create brush dataset directory (next to the export path)
+
             parent_dir = os.path.dirname(export_path)
             brush_dataset_dir = os.path.join(parent_dir, "brush_dataset")
-            os.makedirs(brush_dataset_dir, exist_ok=True)
-            
-            # Create sparse directory structure
-            brush_sparse_dir = os.path.join(brush_dataset_dir, "sparse", "0")
-            os.makedirs(brush_sparse_dir, exist_ok=True)
-            
-            # Create images directory
-            brush_images_dir = os.path.join(brush_dataset_dir, "images")
-            os.makedirs(brush_images_dir, exist_ok=True)
-            
-            # Copy sparse model files
-            sparse_files = ['cameras.bin', 'images.bin', 'points3D.bin']
-            for filename in sparse_files:
-                src_file = os.path.join(transformed_sparse_src, filename)
-                dst_file = os.path.join(brush_sparse_dir, filename)
-                if os.path.exists(src_file):
-                    shutil.copy2(src_file, dst_file)
-                    logger.info(f"Copied {filename} to brush dataset")
-                else:
-                    # Try .txt versions if .bin doesn't exist
-                    txt_filename = filename.replace('.bin', '.txt')
-                    src_file = os.path.join(transformed_sparse_src, txt_filename)
-                    dst_file = os.path.join(brush_sparse_dir, txt_filename)
-                    if os.path.exists(src_file):
-                        shutil.copy2(src_file, dst_file)
-                        logger.info(f"Copied {txt_filename} to brush dataset")
-            
-            # Create symbolic links or copy images (depending on OS)
-            if platform.system() == "Windows":
-                # On Windows, copy images (symbolic links can be problematic)
-                for filename in os.listdir(images_path):
-                    if filename.lower().endswith(('.jpg', '.jpeg', '.png')):
-                        src_file = os.path.join(images_path, filename)
-                        dst_file = os.path.join(brush_images_dir, filename)
-                        if not os.path.exists(dst_file):
-                            shutil.copy2(src_file, dst_file)
-            else:
-                # On Unix-like systems, create symbolic links to save space
-                try:
-                    # Remove existing link if it exists
-                    if os.path.islink(brush_images_dir):
-                        os.unlink(brush_images_dir)
-                    elif os.path.exists(brush_images_dir):
-                        shutil.rmtree(brush_images_dir)
-                    
-                    # Create symbolic link
-                    os.symlink(os.path.abspath(images_path), brush_images_dir)
-                    logger.info("Created symbolic link to images directory")
-                except OSError:
-                    # Fall back to copying if symbolic link fails
-                    for filename in os.listdir(images_path):
-                        if filename.lower().endswith(('.jpg', '.jpeg', '.png')):
-                            src_file = os.path.join(images_path, filename)
-                            dst_file = os.path.join(brush_images_dir, filename)
-                            if not os.path.exists(dst_file):
-                                shutil.copy2(src_file, dst_file)
-            
+
+            from ..services.brush import prepare_dataset
+            from ..services.errors import BrushError
+            try:
+                prepare_dataset(
+                    Path(transformed_sparse_src),
+                    Path(images_path),
+                    Path(brush_dataset_dir),
+                )
+            except BrushError as exc:
+                raise RuntimeError(str(exc)) from exc
+
             # Mark as prepared
             colmap_instance.brush_dataset_prepared = True
             
