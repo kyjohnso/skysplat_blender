@@ -3,7 +3,7 @@ import os
 import time
 from pathlib import Path
 
-PANEL_VERSION = "0.4.1"  # Updated version for multi-instance support
+PANEL_VERSION = "0.4.1.graph"  # phase-1 services-extraction (issue #51 branch)
 
 def get_all_sequences(seq_editor):
     """Get all sequences from the sequence editor (compatible with Blender 4.5 and 5.0)"""

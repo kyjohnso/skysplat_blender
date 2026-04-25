@@ -25,7 +25,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 logger = logging.getLogger('SkySplat')
 
 # Panel version constant
-PANEL_VERSION = "0.4.1"  # Updated for multi-instance support
+PANEL_VERSION = "0.4.1.graph"  # phase-1 services-extraction (issue #51 branch)
 
 def get_default_colmap_path():
     """Get default COLMAP path based on operating system"""
