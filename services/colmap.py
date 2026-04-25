@@ -18,10 +18,19 @@ logger = logging.getLogger(__name__)
 # Cache for COLMAP options to avoid repeated subprocess calls
 _colmap_options_cache: dict = {}
 
-from utils.read_write_model import (
-    read_model as _rw_read_model,
-    write_model as _rw_write_model,
-)
+# Dual-import: relative works when loaded as a Blender addon
+# (services is a sub-package of skysplat_blender), absolute works when
+# pytest puts the addon root on sys.path so `utils` is top-level.
+try:
+    from ..utils.read_write_model import (
+        read_model as _rw_read_model,
+        write_model as _rw_write_model,
+    )
+except ImportError:
+    from utils.read_write_model import (
+        read_model as _rw_read_model,
+        write_model as _rw_write_model,
+    )
 
 from .errors import ColmapError
 

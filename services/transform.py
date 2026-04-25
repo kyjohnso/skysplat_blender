@@ -13,7 +13,11 @@ from __future__ import annotations
 import numpy as np
 from mathutils import Matrix, Vector
 
-from utils.read_write_model import Image, Point3D, qvec2rotmat, rotmat2qvec
+# Dual-import: relative works in Blender, absolute works under pytest.
+try:
+    from ..utils.read_write_model import Image, Point3D, qvec2rotmat, rotmat2qvec
+except ImportError:
+    from utils.read_write_model import Image, Point3D, qvec2rotmat, rotmat2qvec
 
 from .colmap import ColmapModel
 
