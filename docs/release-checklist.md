@@ -28,3 +28,16 @@ Run before tagging a release.
 
 ### Brush panel
 - [ ] Click "Run Brush Training" on a prepared dataset — training launches, output appears in console
+
+### Node editor (phase 2 MVP)
+
+- [ ] Editor Type dropdown shows "SkySplat" — selecting it opens an empty canvas
+- [ ] Shift-A → SkySplat menu has 6 entries: Video, Frames Folder, Frame Extract, COLMAP Reconstruct, Brush Dataset, Brush Train
+- [ ] Drop in a Video node — set a video file path — Run — VSE strip appears, status flips to "Done"
+- [ ] Wire Video → Frame Extract — Run extract — frames written to node workspace dir
+- [ ] Wire Frame Extract → COLMAP Reconstruct — Run COLMAP — sparse model generated
+- [ ] Wire COLMAP → Brush Dataset — Run — sparse + images copied/symlinked under workspace
+- [ ] Wire Brush Dataset → Brush Train — set brush_executable, low total_steps — Run — .ply appears
+- [ ] Click View Output (T icon) on any Done node — log file opens in OS viewer
+- [ ] Shift-D duplicate any Done node — duplicate has fresh UUID, status="dirty", empty workspace
+- [ ] Save .blend, reopen — node graph persists, Done nodes still show "Done"
