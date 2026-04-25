@@ -1,6 +1,8 @@
 import bpy
 import os
 import time
+import re
+import shutil
 
 PANEL_VERSION = "0.4.1"  # Updated version for multi-instance support
 
@@ -29,6 +31,13 @@ def get_skysplat_props(context):
     else:
         return context.scene.skysplat_props
 
+def is_image_sequence(filepath):
+    """Check if the path is an image sequence vs video file"""
+    image_extensions = {'.png', '.jpg', '.jpeg', '.tiff', '.tif', '.exr', '.bmp', '.dpx', '.hdr'}
+    video_extensions = {'.mp4', '.mov', '.avi', '.mkv', '.webm', '.flv', '.wmv'}
+    ext = os.path.splitext(filepath)[1].lower()
+    return ext in image_extensions
+
 def update_srt_path(self, context):
     """Update SRT path when video path changes"""
     if self.video_path:
@@ -51,14 +60,13 @@ def update_srt_path(self, context):
         update_output_folder(self, context)
 
 def update_output_folder(self, context):
-    """Set default output folder based on video path"""
+    """Set default output folder based on video or image sequence path"""
     if self.video_path:
         video_path = bpy.path.abspath(self.video_path)
-        # Get directory and filename without extension
         video_dir = os.path.dirname(video_path)
-        video_name = os.path.splitext(os.path.basename(video_path))[0]
-        # Create frames folder path
-        frames_folder = os.path.join(video_dir, f"{video_name}_frames")
+        # Use filename (without extension) for both videos and image sequences
+        media_name = os.path.splitext(os.path.basename(video_path))[0]
+        frames_folder = os.path.join(video_dir, f"{media_name}_frames")
         self.output_folder = frames_folder
 
 class VideoInstance(bpy.types.PropertyGroup):
@@ -70,8 +78,8 @@ class VideoInstance(bpy.types.PropertyGroup):
     )
     
     video_path: bpy.props.StringProperty(
-        name="Video File",
-        description="Path to the input video",
+        name="Video/Image Sequence",
+        description="Path to video file or first frame of image sequence",
         subtype='FILE_PATH',
         update=update_srt_path
     )
@@ -138,8 +146,8 @@ class SkySplatProperties(bpy.types.PropertyGroup):
     
     # Legacy properties for backward compatibility
     video_path: bpy.props.StringProperty(
-        name="Video File",
-        description="Path to the input video (legacy)",
+        name="Video/Image Sequence",
+        description="Path to video file or first frame of image sequence (legacy)",
         subtype='FILE_PATH',
         update=update_srt_path
     )
@@ -174,8 +182,8 @@ class SkySplatProperties(bpy.types.PropertyGroup):
 
 class SKY_SPLAT_OT_add_video_instance(bpy.types.Operator):
     bl_idname = "skysplat.add_video_instance"
-    bl_label = "Add Video Instance"
-    bl_description = "Add a new video instance"
+    bl_label = "Add Media Instance"
+    bl_description = "Add a new media instance (video or image sequence)"
 
     def execute(self, context):
         # In Blender 5.0+, select the default scene for the video sequencer if not already set
@@ -192,19 +200,66 @@ class SKY_SPLAT_OT_add_video_instance(bpy.types.Operator):
             if context.workspace.sequencer_scene and not context.workspace.sequencer_scene.sequence_editor:
                 context.workspace.sequencer_scene.sequence_editor_create()
 
-        # Now add the video instance (props will be from window scene)
+        # Now add the media instance (props will be from window scene)
         props = get_skysplat_props(context)
         new_instance = props.video_instances.add()
-        new_instance.name = f"Video_{len(props.video_instances)}"
+        new_instance.name = f"Media_{len(props.video_instances)}"
         props.active_video_index = len(props.video_instances) - 1
-        self.report({'INFO'}, f"Added video instance: {new_instance.name}")
+        self.report({'INFO'}, f"Added media instance: {new_instance.name}")
         return {'FINISHED'}
+
+class SKY_SPLAT_OT_browse_media(bpy.types.Operator):
+    """Browse for video or image sequence"""
+    bl_idname = "skysplat.browse_media"
+    bl_label = "Browse Media"
+    bl_description = "Browse for video file or image sequence"
+
+    # File browser properties
+    filepath: bpy.props.StringProperty(subtype='FILE_PATH')
+    directory: bpy.props.StringProperty(subtype='DIR_PATH')
+
+    # This enables image sequence detection in file browser
+    files: bpy.props.CollectionProperty(type=bpy.types.OperatorFileListElement)
+
+    # Filter options
+    filter_movie: bpy.props.BoolProperty(default=True, options={'HIDDEN'})
+    filter_image: bpy.props.BoolProperty(default=True, options={'HIDDEN'})
+    filter_folder: bpy.props.BoolProperty(default=True, options={'HIDDEN'})
+
+    @classmethod
+    def poll(cls, context):
+        props = get_skysplat_props(context)
+        return len(props.video_instances) > 0
+
+    def execute(self, context):
+        props = get_skysplat_props(context)
+        if len(props.video_instances) > 0:
+            video_instance = props.video_instances[props.active_video_index]
+
+            # Set the selected file path
+            if self.filepath:
+                video_instance.video_path = self.filepath
+                self.report({'INFO'}, f"Selected: {os.path.basename(self.filepath)}")
+
+        return {'FINISHED'}
+
+    def invoke(self, context, event):
+        # Set initial directory if video_path already exists
+        props = get_skysplat_props(context)
+        if len(props.video_instances) > 0:
+            video_instance = props.video_instances[props.active_video_index]
+            if video_instance.video_path:
+                self.filepath = video_instance.video_path
+
+        # Open the file browser
+        context.window_manager.fileselect_add(self)
+        return {'RUNNING_MODAL'}
 
 class SKY_SPLAT_OT_remove_video_instance(bpy.types.Operator):
     bl_idname = "skysplat.remove_video_instance"
-    bl_label = "Remove Video Instance"
-    bl_description = "Remove the active video instance"
-    
+    bl_label = "Remove Media Instance"
+    bl_description = "Remove the active media instance"
+
     @classmethod
     def poll(cls, context):
         props = get_skysplat_props(context)
@@ -215,13 +270,13 @@ class SKY_SPLAT_OT_remove_video_instance(bpy.types.Operator):
         if len(props.video_instances) > 0:
             props.video_instances.remove(props.active_video_index)
             props.active_video_index = max(0, props.active_video_index - 1)
-            self.report({'INFO'}, "Removed video instance")
+            self.report({'INFO'}, "Removed media instance")
         return {'FINISHED'}
 
 class SKY_SPLAT_OT_load_video(bpy.types.Operator):
     bl_idname = "skysplat.load_video"
-    bl_label = "Load Video and SRT"
-    bl_description = "Load the video and associated SRT file into the Video Sequencer"
+    bl_label = "Load Video/Images"
+    bl_description = "Load video file or image sequence into the Video Sequencer"
 
     def execute(self, context):
         # Get props from the correct scene (window scene, not sequencer scene)
@@ -229,19 +284,19 @@ class SKY_SPLAT_OT_load_video(bpy.types.Operator):
 
         # Get active video instance
         if len(props.video_instances) == 0:
-            self.report({'ERROR'}, "No video instances. Add a video instance first.")
+            self.report({'ERROR'}, "No media instances. Add a media instance first.")
             return {'CANCELLED'}
 
         video_instance = props.video_instances[props.active_video_index]
 
         # Validate paths
         if not video_instance.video_path:
-            self.report({'ERROR'}, "Please select a video file")
+            self.report({'ERROR'}, "Please select a video file or image sequence")
             return {'CANCELLED'}
 
         video_path = bpy.path.abspath(video_instance.video_path)
         if not os.path.exists(video_path):
-            self.report({'ERROR'}, f"Video file not found: {video_instance.video_path}")
+            self.report({'ERROR'}, f"Media file not found: {video_instance.video_path}")
             return {'CANCELLED'}
 
         # Get the sequencer scene (Blender 5.0 uses workspace.sequencer_scene, fallback to context.scene)
@@ -290,17 +345,95 @@ class SKY_SPLAT_OT_load_video(bpy.types.Operator):
         
         # Use the next channel (or channel 1 if no strips exist)
         next_channel = max_channel + 1 if max_channel > 0 else 1
-        
-        # Add video strip to the next available channel
-        sequences_collection = get_sequences_collection(seq_editor)
-        video_strip = sequences_collection.new_movie(
-            name=os.path.basename(video_path),
-            filepath=video_path,
-            channel=next_channel,
-            frame_start=1
-        )
 
-        self.report({'INFO'}, f"Added strip '{video_strip.name}' to channel {next_channel} in scene '{target_scene.name}'")
+        # Add video or image sequence strip to the next available channel
+        sequences_collection = get_sequences_collection(seq_editor)
+
+        # Determine if this is an image sequence or video
+        if is_image_sequence(video_path):
+            # For image sequences, find all frames in the directory
+            image_dir = os.path.dirname(video_path)
+            base_name = os.path.basename(video_path)
+
+            # Extract pattern and find all sequential frames
+            match = re.match(r'(.*?)(\d+)(\.\w+)$', base_name)
+            if match:
+                prefix, number, ext = match.groups()
+                num_digits = len(number)
+
+                # Debug output
+                self.report({'INFO'}, f"Scanning for sequence: prefix='{prefix}', digits={num_digits}, ext='{ext}'")
+
+                # Find all matching files with sequential numbering
+                all_frames = []
+                for f in sorted(os.listdir(image_dir)):
+                    # Match files with same prefix, same number of digits, same extension
+                    frame_match = re.match(f'^{re.escape(prefix)}(\\d{{{num_digits}}}){re.escape(ext)}$', f)
+                    if frame_match:
+                        all_frames.append({
+                            'name': f,
+                            'frame_num': int(frame_match.group(1))
+                        })
+
+                self.report({'INFO'}, f"Found {len(all_frames)} matching frames in directory")
+                if len(all_frames) > 0:
+                    self.report({'INFO'}, f"First frame: {all_frames[0]['name']}, Last frame: {all_frames[-1]['name']}")
+
+                if len(all_frames) > 1:
+                    # We have a sequence - create strip with first frame, then add remaining frames
+                    self.report({'INFO'}, f"Creating image sequence with {len(all_frames)} frames")
+
+                    # Create the strip with the first frame
+                    video_strip = sequences_collection.new_image(
+                        name=f"{prefix}sequence",
+                        filepath=video_path,
+                        channel=next_channel,
+                        frame_start=1
+                    )
+
+                    # The strip starts with 1 element (the first frame)
+                    # Now manually add all the other frames as elements
+                    for i, frame_info in enumerate(all_frames):
+                        if i == 0:
+                            # First frame is already loaded, update its filename
+                            video_strip.elements[0].filename = frame_info['name']
+                        else:
+                            # Add subsequent frames
+                            elem = video_strip.elements.append(frame_info['name'])
+
+                    # Update the strip to reflect the new duration
+                    video_strip.frame_final_duration = len(all_frames)
+
+                    self.report({'INFO'}, f"Added image sequence: {video_strip.name}")
+                    self.report({'INFO'}, f"Duration: {video_strip.frame_final_duration} frames ({len(all_frames)} images)")
+                    self.report({'INFO'}, f"Elements in strip: {len(video_strip.elements)}")
+                else:
+                    # Only one frame found, add as single image
+                    video_strip = sequences_collection.new_image(
+                        name=base_name,
+                        filepath=video_path,
+                        channel=next_channel,
+                        frame_start=1
+                    )
+                    self.report({'INFO'}, f"Added single image (no sequence detected): {video_strip.name}")
+            else:
+                # Filename doesn't match expected pattern
+                video_strip = sequences_collection.new_image(
+                    name=base_name,
+                    filepath=video_path,
+                    channel=next_channel,
+                    frame_start=1
+                )
+                self.report({'INFO'}, f"Added single image: {video_strip.name}")
+        else:
+            # For video files, use new_movie
+            video_strip = sequences_collection.new_movie(
+                name=os.path.basename(video_path),
+                filepath=video_path,
+                channel=next_channel,
+                frame_start=1
+            )
+            self.report({'INFO'}, f"Added video '{video_strip.name}' to channel {next_channel} in scene '{target_scene.name}'")
 
         # Store the channel number in the video instance for reference
         video_instance['sequencer_channel'] = next_channel
@@ -335,18 +468,16 @@ class SKY_SPLAT_OT_load_video(bpy.types.Operator):
         # Auto-create a corresponding COLMAP instance with correct paths
         if hasattr(context.scene, 'skysplat_colmap_props'):
             colmap_props = context.scene.skysplat_colmap_props
-            
-            # Get video name for naming the COLMAP instance
-            video_name = os.path.splitext(os.path.basename(video_path))[0]
-            
+
+            # Use filename (without extension) for both videos and image sequences
+            video_dir = os.path.dirname(video_path)
+            media_name = os.path.splitext(os.path.basename(video_path))[0]
+            frames_folder = os.path.join(video_dir, f"{media_name}_frames")
+            colmap_output_folder = os.path.join(video_dir, f"{media_name}_colmap_output")
+
             # Create new COLMAP instance
             new_colmap = colmap_props.colmap_instances.add()
-            new_colmap.name = f"COLMAP_{video_name}"
-            
-            # Set up paths based on video
-            video_dir = os.path.dirname(video_path)
-            frames_folder = os.path.join(video_dir, f"{video_name}_frames")
-            colmap_output_folder = os.path.join(video_dir, f"{video_name}_colmap_output")
+            new_colmap.name = f"COLMAP_{media_name}"
             
             new_colmap.input_folder = frames_folder
             new_colmap.output_folder = colmap_output_folder
@@ -358,37 +489,117 @@ class SKY_SPLAT_OT_load_video(bpy.types.Operator):
             colmap_props.active_colmap_index = len(colmap_props.colmap_instances) - 1
             
             self.report({'INFO'}, f"Auto-created COLMAP instance: {new_colmap.name}")
-        
-        self.report({'INFO'}, f"Loaded video into sequencer: {video_instance.video_path}")
+
+        # Report appropriate message based on media type
+        media_type = "image sequence" if is_image_sequence(video_path) else "video"
+        self.report({'INFO'}, f"Loaded {media_type} into sequencer: {video_instance.video_path}")
         return {'FINISHED'}
 
 class SKY_SPLAT_OT_extract_frames(bpy.types.Operator):
     bl_idname = "skysplat.extract_frames"
-    bl_label = "Extract Frames"
-    bl_description = "Extract frames from the loaded video"
+    bl_label = "Process Frames"
+    bl_description = "Extract frames from video or copy/decimate image sequence"
     
     def execute(self, context):
         # Start timing
         start_time = time.time()
 
         props = get_skysplat_props(context)
-        
+
         # Get active video instance
         if len(props.video_instances) == 0:
-            self.report({'ERROR'}, "No video instances. Add a video instance first.")
+            self.report({'ERROR'}, "No media instances. Add a media instance first.")
             return {'CANCELLED'}
-        
+
         video_instance = props.video_instances[props.active_video_index]
-        
+
         # Validate required fields
         if not video_instance.video_path:
-            self.report({'ERROR'}, "Please load a video first")
+            self.report({'ERROR'}, "Please load media first")
             return {'CANCELLED'}
-            
+
+        video_path = bpy.path.abspath(video_instance.video_path)
+
+        # Check if this is an image sequence
+        if is_image_sequence(video_path):
+            # For image sequences, copy/decimate frames to output folder
+            image_dir = os.path.dirname(video_path)
+
+            if not video_instance.output_folder:
+                self.report({'ERROR'}, "Please specify an output folder")
+                return {'CANCELLED'}
+
+            output_folder = bpy.path.abspath(video_instance.output_folder)
+
+            # Create output directory if it doesn't exist
+            os.makedirs(output_folder, exist_ok=True)
+
+            # Find all image files in sequence, sorted
+            base_name = os.path.basename(video_path)
+            match = re.match(r'(.*?)(\d+)(\.\w+)$', base_name)
+
+            if not match:
+                self.report({'ERROR'}, "Could not detect image sequence pattern")
+                return {'CANCELLED'}
+
+            prefix, number, ext = match.groups()
+            num_digits = len(number)
+
+            # Find all matching sequential frames
+            all_frames = []
+            for f in sorted(os.listdir(image_dir)):
+                frame_match = re.match(f'^{re.escape(prefix)}(\\d{{{num_digits}}}){re.escape(ext)}$', f)
+                if frame_match:
+                    all_frames.append({
+                        'name': f,
+                        'frame_num': int(frame_match.group(1)),
+                        'path': os.path.join(image_dir, f)
+                    })
+
+            if not all_frames:
+                self.report({'ERROR'}, "No frames found in sequence")
+                return {'CANCELLED'}
+
+            # Apply frame range and step
+            start_idx = max(0, video_instance.frame_start - 1)  # Convert to 0-based index
+            end_idx = min(len(all_frames), video_instance.frame_end)
+            step = video_instance.frame_step
+
+            selected_frames = all_frames[start_idx:end_idx:step]
+
+            self.report({'INFO'}, f"Processing {len(selected_frames)} frames from {len(all_frames)} total (start={video_instance.frame_start}, end={video_instance.frame_end}, step={step})")
+
+            # Copy selected frames preserving original filenames
+            for frame_info in selected_frames:
+                src_path = frame_info['path']
+                # Keep original filename
+                dst_name = frame_info['name']
+                dst_path = os.path.join(output_folder, dst_name)
+
+                shutil.copy2(src_path, dst_path)
+
+            # Mark frames as extracted
+            video_instance.frames_extracted = True
+
+            # Calculate timing
+            end_time = time.time()
+            total_time = end_time - start_time
+
+            self.report({'INFO'}, f"Copied {len(selected_frames)} frames to {output_folder} in {total_time:.2f} seconds")
+
+            # Update COLMAP paths to point to the output directory
+            if hasattr(context.scene, 'skysplat_colmap_props'):
+                context.scene.skysplat_colmap_props.update_from_video_panel(context)
+
+            # Open the output folder
+            bpy.ops.wm.path_open(filepath=output_folder)
+
+            return {'FINISHED'}
+
         if not video_instance.output_folder:
             self.report({'ERROR'}, "Please specify an output folder")
             return {'CANCELLED'}
-            
+
         output_folder = bpy.path.abspath(video_instance.output_folder)
         
         # Create output directory if it doesn't exist
@@ -496,7 +707,7 @@ class SKY_SPLAT_OT_extract_frames(bpy.types.Operator):
         
 
 class SKY_SPLAT_PT_video_panel(bpy.types.Panel):
-    bl_label = "SkySplat Video Loader"
+    bl_label = "SkySplat Media Loader"
     bl_idname = "SKY_SPLAT_PT_video_panel"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
@@ -507,9 +718,9 @@ class SKY_SPLAT_PT_video_panel(bpy.types.Panel):
         layout = self.layout
         props = get_skysplat_props(context)
         
-        # Video instance management
+        # Video/Image instance management
         box = layout.box()
-        box.label(text="Video Instances", icon='SEQUENCE')
+        box.label(text="Media Instances", icon='SEQUENCE')
         
         row = box.row()
         row.template_list("UI_UL_list", "video_instances", props, "video_instances", 
@@ -526,10 +737,24 @@ class SKY_SPLAT_PT_video_panel(bpy.types.Panel):
             # Instance name
             box.prop(video_instance, "name")
             
-            # Video loading section
+            # Video/Image loading section
             box = layout.box()
-            box.label(text="Video & Metadata Files")
-            box.prop(video_instance, "video_path")
+            box.label(text="Video/Images & Metadata")
+
+            # Add browse button for better file selection with sequence support
+            row = box.row(align=True)
+            row.prop(video_instance, "video_path", text="")
+            row.operator("skysplat.browse_media", icon='FILEBROWSER', text="")
+
+            # Show media type indicator if loaded
+            if video_instance.video_path:
+                video_path = bpy.path.abspath(video_instance.video_path)
+                if os.path.exists(video_path):
+                    if is_image_sequence(video_path):
+                        box.label(text="Type: Image Sequence", icon='IMAGE_DATA')
+                    else:
+                        box.label(text="Type: Video File", icon='FILE_MOVIE')
+
             box.prop(video_instance, "srt_path")
             
             row = box.row()
@@ -537,28 +762,37 @@ class SKY_SPLAT_PT_video_panel(bpy.types.Panel):
             if video_instance.is_loaded:
                 row.label(text="✓ Loaded", icon='CHECKMARK')
             
-            # Frame extraction section
+            # Frame processing section
             box = layout.box()
-            box.label(text="Frame Extraction")
-            
+            box.label(text="Frame Processing")
+
+            # Show context-specific help
+            if video_instance.video_path:
+                video_path = bpy.path.abspath(video_instance.video_path)
+                if os.path.exists(video_path):
+                    if is_image_sequence(video_path):
+                        box.label(text="Copy/decimate frames from sequence", icon='INFO')
+                    else:
+                        box.label(text="Extract frames from video", icon='INFO')
+
             row = box.row(align=True)
             row.prop(video_instance, "frame_start")
             row.prop(video_instance, "frame_end")
-            
+
             box.prop(video_instance, "frame_step")
             box.prop(video_instance, "output_folder")
-            
+
             row = box.row()
             row.operator("skysplat.extract_frames", icon='RENDER_STILL')
             if video_instance.frames_extracted:
-                row.label(text="✓ Extracted", icon='CHECKMARK')
+                row.label(text="✓ Processed", icon='CHECKMARK')
             
             # Info about shared paths
             box = layout.box()
-            box.label(text="💡 Tip: Multiple videos can share the same", icon='INFO')
-            box.label(text="output folder for combined COLMAP processing")
+            box.label(text="💡 Tip: Multiple media sources can share", icon='INFO')
+            box.label(text="the same output folder for combined processing")
         else:
-            box.label(text="Add a video instance to begin", icon='INFO')
+            box.label(text="Add a media instance to begin", icon='INFO')
 
         # Version indicator at the bottom
         row = layout.row()
@@ -570,6 +804,7 @@ def register():
     bpy.utils.register_class(SkySplatProperties)
     bpy.types.Scene.skysplat_props = bpy.props.PointerProperty(type=SkySplatProperties)
     bpy.utils.register_class(SKY_SPLAT_OT_add_video_instance)
+    bpy.utils.register_class(SKY_SPLAT_OT_browse_media)
     bpy.utils.register_class(SKY_SPLAT_OT_remove_video_instance)
     bpy.utils.register_class(SKY_SPLAT_OT_load_video)
     bpy.utils.register_class(SKY_SPLAT_OT_extract_frames)
@@ -580,6 +815,7 @@ def unregister():
     bpy.utils.unregister_class(SKY_SPLAT_OT_extract_frames)
     bpy.utils.unregister_class(SKY_SPLAT_OT_load_video)
     bpy.utils.unregister_class(SKY_SPLAT_OT_remove_video_instance)
+    bpy.utils.unregister_class(SKY_SPLAT_OT_browse_media)
     bpy.utils.unregister_class(SKY_SPLAT_OT_add_video_instance)
     del bpy.types.Scene.skysplat_props
     bpy.utils.unregister_class(SkySplatProperties)
