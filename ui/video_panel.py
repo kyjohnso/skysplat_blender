@@ -1,6 +1,7 @@
 import bpy
 import os
 import time
+from pathlib import Path
 
 PANEL_VERSION = "0.4.1"  # Updated version for multi-instance support
 
@@ -30,25 +31,27 @@ def get_skysplat_props(context):
         return context.scene.skysplat_props
 
 def update_srt_path(self, context):
-    """Update SRT path when video path changes"""
-    if self.video_path:
-        # Get the absolute path
-        video_path = bpy.path.abspath(self.video_path)
-        # Change extension to .srt
-        base_path, ext = os.path.splitext(video_path)
-        srt_path = base_path + ".SRT"
-        
-        # Only set if the SRT file exists
-        if os.path.exists(srt_path):
-            self.srt_path = srt_path
-        else:
-            # Try lowercase .srt as an alternative
-            srt_path_lower = base_path + ".srt"
-            if os.path.exists(srt_path_lower):
-                self.srt_path = srt_path_lower
+    """Auto-detect SRT path when video path changes, and pre-parse metadata."""
+    if not self.video_path:
+        return
+    video_path = bpy.path.abspath(self.video_path)
+    base, _ = os.path.splitext(video_path)
+    candidate = base + ".SRT"
+    if not os.path.exists(candidate):
+        candidate = base + ".srt"
+    if os.path.exists(candidate):
+        self.srt_path = candidate
+        try:
+            from ..services.srt import parse_srt_metadata
+            meta = parse_srt_metadata(Path(candidate))
+        except Exception:
+            meta = None
+        # Stash detected focal length for future use (phase 2 camera-model spec).
+        if meta and meta.get("focal_len_mm") is not None:
+            self["detected_focal_len_mm"] = float(meta["focal_len_mm"])
 
-        # Also update the output folder when video path changes
-        update_output_folder(self, context)
+    # Also update the output folder when video path changes
+    update_output_folder(self, context)
 
 def update_output_folder(self, context):
     """Set default output folder based on video path"""
