@@ -49,24 +49,20 @@ def _transform_point(point: Point3D, mat4: Matrix) -> Point3D:
 
 
 def _transform_image_pose(image: Image, mat4: Matrix) -> Image:
-    # COLMAP stores world->camera. So:
-    #   R_wc, t_wc = qvec2rotmat(image.qvec), image.tvec
-    # The camera center in world coords:
-    #   C = -R_wc.T @ t_wc
-    # Apply world transform: C' = mat4 @ C, R'_cw = R_cw @ mat4_rot.inverse
-    # Then convert back to world->camera.
+    # COLMAP stores world->camera (R_wc, t_wc).
+    # When the world is transformed by mat4 (P_w_new = R_world @ P_w + t_world),
+    # the same physical observation requires:
+    #   R_wc_new = R_wc @ R_world.T
+    #   t_wc_new = t_wc - R_wc_new @ t_world
     R_wc = qvec2rotmat(image.qvec)
     t_wc = np.array(image.tvec, dtype=float)
-    C = -R_wc.T @ t_wc
 
     mat4_np = np.array(mat4)
     rot_world = mat4_np[:3, :3]
     trans_world = mat4_np[:3, 3]
 
-    C_new = rot_world @ C + trans_world
-    R_cw_new = R_wc.T @ np.linalg.inv(rot_world)
-    R_wc_new = R_cw_new.T
-    t_wc_new = -R_wc_new @ C_new
+    R_wc_new = R_wc @ rot_world.T
+    t_wc_new = t_wc - R_wc_new @ trans_world
 
     return Image(
         id=image.id,
