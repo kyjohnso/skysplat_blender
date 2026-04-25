@@ -124,6 +124,7 @@ class TestMergeModels:
             run_mock.return_value = MagicMock(returncode=0, stdout="", stderr="")
             result = merge_models(a, b, out, log_path=tmp_path / "log")
         cmd = run_mock.call_args.args[0]
+        assert cmd[0] == "colmap"
         assert cmd[1] == "model_merger"
         assert "--input_path1" in cmd
         assert "--input_path2" in cmd
@@ -135,3 +136,15 @@ class TestMergeModels:
             run_mock.return_value = MagicMock(returncode=1, stdout="", stderr="boom")
             with pytest.raises(ColmapError):
                 merge_models(a, b, tmp_path / "out", log_path=tmp_path / "log")
+
+    def test_uses_custom_executable(self, tmp_path):
+        a = tmp_path / "a"; b = tmp_path / "b"; a.mkdir(); b.mkdir()
+        with patch("services.colmap.subprocess.run") as run_mock:
+            run_mock.return_value = MagicMock(returncode=0, stdout="", stderr="")
+            merge_models(
+                a, b, tmp_path / "out",
+                log_path=tmp_path / "log",
+                colmap_executable="/custom/path/colmap",
+            )
+        cmd = run_mock.call_args.args[0]
+        assert cmd[0] == "/custom/path/colmap"
