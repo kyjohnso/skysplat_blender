@@ -1083,101 +1083,23 @@ class SKY_SPLAT_OT_export_colmap_model(bpy.types.Operator):
             export_dir = os.path.join(colmap_instance.model_export_path, "sparse", "0")
             os.makedirs(export_dir, exist_ok=True)
             
-            # Read the original model
-            cameras, images, points3D = read_model(source_path)
-            
-            logger.info("Exporting model without coordinate transformation")
-            
-            # Extract scaling from the root's transformation
-            # This is uniform scale - average of X, Y, Z scales
-            scale_factor = (root.scale.x + root.scale.y + root.scale.z) / 3.0
-            logger.info(f"Detected scale factor: {scale_factor}")
-            
-            # Create a dictionary of image objects by ID for quick lookup
-            image_objects = {}
-            for obj in bpy.data.objects:
-                if 'colmap_image_id' in obj and 'colmap_instance_name' in obj:
-                    if obj['colmap_instance_name'] == colmap_instance.name:
-                        image_objects[obj['colmap_image_id']] = obj
-            
-            # Update camera poses based on the transformed Blender objects
-            for image_id, image in images.items():
-                if image_id in image_objects:
-                    obj = image_objects[image_id]
-                    
-                    # Get world transformation (includes the root transformation)
-                    # This is camera-to-world in Blender
-                    world_matrix = obj.matrix_world
-                    
-                    # Decompose the matrix to get location, rotation, and scale separately
-                    loc, rot, scale = world_matrix.decompose()
-                    
-                    # Keep the scaled location (important!)
-                    camera_center = np.array([loc.x, loc.y, loc.z])
-                    
-                    # Normalize the rotation to remove scale influence (important!)
-                    rot_matrix = rot.to_matrix().normalized().to_3x3()
-                    
-                    # Need to undo the X-axis rotation we applied during import
-                    x_rotation_inv = mathutils.Matrix.Rotation(-math.pi, 3, 'X')
-                    corrected_rotation = rot_matrix @ x_rotation_inv
-                    R = np.array(corrected_rotation)
-                    
-                    # COLMAP's R is the inverse (transpose) of camera-to-world rotation
-                    R_colmap = R.T
-                    
-                    # COLMAP's t is -R_colmap * camera_center
-                    t_colmap = -R_colmap @ camera_center
-                    
-                    # Convert rotation matrix to quaternion using the COLMAP function
-                    qvec = rotmat2qvec(R_colmap)
-                    
-                    # Create a new Image object with updated transformation AND preserve filename
-                    images[image_id] = Image(
-                        id=image.id,
-                        qvec=qvec,
-                        tvec=np.array(t_colmap),
-                        camera_id=image.camera_id,
-                        name=image.name,  # This preserves the original filename!
-                        xys=image.xys,
-                        point3D_ids=image.point3D_ids
-                    )
-            
-            # Transform point cloud if needed
-            point_cloud = None
-            for obj in bpy.data.objects:
-                if 'colmap_points3D' in obj and obj.parent == root:
-                    point_cloud = obj
-                    break
-            
-            if point_cloud and points3D:
-                # Get global transformation of the point cloud
-                pc_matrix = point_cloud.matrix_world
-                
-                # Create transformed points3D dictionary
-                transformed_points3D = {}
-                for point_id, point in points3D.items():
-                    # Create a vector for the point
-                    point_vec = Vector((point.xyz[0], point.xyz[1], point.xyz[2]))
-                    
-                    # Apply the transformation directly
-                    final_point = pc_matrix @ point_vec
-                    
-                    # Create a new Point3D object with transformed position
-                    transformed_points3D[point_id] = Point3D(
-                        id=point.id,
-                        xyz=np.array([final_point.x, final_point.y, final_point.z]),
-                        rgb=point.rgb,
-                        error=point.error,
-                        image_ids=point.image_ids,
-                        point2D_idxs=point.point2D_idxs
-                    )
-                
-                # Replace the original points with transformed ones
-                points3D = transformed_points3D
-            
+            # Read the original model via the service.
+            from ..services.colmap import read_model, write_model
+            from ..services.transform import apply_transform
+
+            model = read_model(Path(source_path))
+
+            # Build the world transform from the COLMAP_Root empty's matrix_world.
+            # The historical export logic also undid the X-axis flip applied
+            # during import — replicate that by composing an X-rotation inverse
+            # into the transform.
+            x_flip_inv = mathutils.Matrix.Rotation(-math.pi, 4, 'X')
+            world_xform = root.matrix_world @ x_flip_inv
+
+            transformed = apply_transform(model, world_xform)
+
             # Write the updated model
-            write_model(cameras, images, points3D, export_dir)
+            write_model(transformed, Path(export_dir), ext=".bin")
             
             # Mark as exported
             colmap_instance.is_exported = True
