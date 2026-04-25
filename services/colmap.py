@@ -5,12 +5,19 @@ Subprocess parts (Stage B): run_reconstruction, merge_models.
 """
 from __future__ import annotations
 
+import logging
 import os
+import re
 import shutil
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
+
+logger = logging.getLogger(__name__)
+
+# Cache for COLMAP options to avoid repeated subprocess calls
+_colmap_options_cache: dict = {}
 
 from utils.read_write_model import (
     read_model as _rw_read_model,
@@ -118,6 +125,86 @@ class ColmapResult:
 
 
 # ---------------------------------------------------------------------------
+# GPU flag detection
+# ---------------------------------------------------------------------------
+
+def get_colmap_version_and_options(colmap_path: str) -> dict:
+    """Detect COLMAP option syntax by parsing help output.
+
+    Uses dynamic detection instead of hard-coded version checks for better
+    forward compatibility with future COLMAP versions.
+
+    Returns a dict with keys:
+        feature_gpu_option  – e.g. 'FeatureExtraction.use_gpu' or 'SiftExtraction.use_gpu'
+        matching_gpu_option – e.g. 'FeatureMatching.use_gpu' or 'SiftMatching.use_gpu'
+        version             – version string from colmap help, or 'unknown'
+    """
+    global _colmap_options_cache
+
+    cache_key = colmap_path or "colmap"
+    if cache_key in _colmap_options_cache:
+        return _colmap_options_cache[cache_key]
+
+    colmap_command = f'"{colmap_path}"' if colmap_path else "colmap"
+
+    feature_gpu_option = None
+    matching_gpu_option = None
+    version_string = "unknown"
+
+    def _get_help_output(cmd: str) -> str:
+        try:
+            result = subprocess.run(
+                cmd, shell=True, capture_output=True, text=True, timeout=10,
+            )
+            combined = (result.stdout or "") + (result.stderr or "")
+            return combined if result.returncode == 0 else ""
+        except Exception as exc:
+            logger.debug(f"Command '{cmd}' failed: {exc}")
+            return ""
+
+    help_output = _get_help_output(f"{colmap_command} help")
+    if help_output:
+        m = re.search(r'COLMAP\s+([\d.]+\S*)', help_output)
+        if m:
+            version_string = m.group(1)
+
+    feature_help = _get_help_output(f"{colmap_command} feature_extractor --help")
+    if feature_help:
+        if '--FeatureExtraction.use_gpu' in feature_help:
+            feature_gpu_option = 'FeatureExtraction.use_gpu'
+        elif '--SiftExtraction.use_gpu' in feature_help:
+            feature_gpu_option = 'SiftExtraction.use_gpu'
+
+    matcher_help = _get_help_output(f"{colmap_command} sequential_matcher --help")
+    if matcher_help:
+        if '--FeatureMatching.use_gpu' in matcher_help:
+            matching_gpu_option = 'FeatureMatching.use_gpu'
+        elif '--SiftMatching.use_gpu' in matcher_help:
+            matching_gpu_option = 'SiftMatching.use_gpu'
+
+    if feature_gpu_option is None:
+        logger.warning("Could not detect feature GPU option, using 'SiftExtraction.use_gpu' as default")
+        feature_gpu_option = 'SiftExtraction.use_gpu'
+
+    if matching_gpu_option is None:
+        logger.warning("Could not detect matching GPU option, using 'SiftMatching.use_gpu' as default")
+        matching_gpu_option = 'SiftMatching.use_gpu'
+
+    options = {
+        'feature_gpu_option': feature_gpu_option,
+        'matching_gpu_option': matching_gpu_option,
+        'version': version_string,
+    }
+    logger.info(
+        f"Detected COLMAP {version_string}: "
+        f"feature GPU option = {feature_gpu_option}, "
+        f"matching GPU option = {matching_gpu_option}"
+    )
+    _colmap_options_cache[cache_key] = options
+    return options
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -169,6 +256,11 @@ def run_reconstruction(
     camera_model = _camera_model_arg(source.camera_model)
     use_gpu_val = "1" if params.use_gpu else "0"
 
+    # Detect which GPU flag names this COLMAP build uses.
+    colmap_opts = get_colmap_version_and_options(params.colmap_executable)
+    feature_gpu_flag = colmap_opts['feature_gpu_option']
+    matching_gpu_flag = colmap_opts['matching_gpu_option']
+
     # Capture all subprocess output to log.
     with open(log_path, "w") as log:
         # 1. Feature extraction
@@ -178,7 +270,7 @@ def run_reconstruction(
             "--image_path", str(image_path),
             "--ImageReader.single_camera", "1",
             "--ImageReader.camera_model", camera_model,
-            "--SiftExtraction.use_gpu", use_gpu_val,
+            f"--{feature_gpu_flag}", use_gpu_val,
         )
 
         # 2. Matching
@@ -186,7 +278,7 @@ def run_reconstruction(
         _run_colmap_step(
             log, params.colmap_executable, matcher,
             "--database_path", str(db),
-            "--SiftMatching.use_gpu", use_gpu_val,
+            f"--{matching_gpu_flag}", use_gpu_val,
         )
 
         # 3. Bundle adjustment (mapper)

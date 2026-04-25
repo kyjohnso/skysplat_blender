@@ -85,96 +85,6 @@ def get_default_colmap_path():
     
     return ""
 
-# Cache for COLMAP options to avoid repeated subprocess calls
-_colmap_options_cache = {}
-
-def get_colmap_version_and_options(colmap_path):
-    """
-    Detect COLMAP option syntax by parsing help output.
-    
-    Uses dynamic detection instead of hard-coded version checks for better
-    forward compatibility with future COLMAP versions.
-    """
-    global _colmap_options_cache
-    
-    # Check cache first
-    cache_key = colmap_path or "colmap"
-    if cache_key in _colmap_options_cache:
-        return _colmap_options_cache[cache_key]
-    
-    colmap_command = f'"{colmap_path}"' if colmap_path else "colmap"
-    
-    # Default options (will be updated based on detection)
-    feature_gpu_option = None
-    matching_gpu_option = None
-    version_string = "unknown"
-    
-    # Helper function to get combined stdout+stderr from command
-    def get_help_output(cmd):
-        try:
-            result = subprocess.run(
-                cmd,
-                shell=True,
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
-            # COLMAP may write help to stdout or stderr, so combine both
-            combined_output = (result.stdout or "") + (result.stderr or "")
-            return combined_output if result.returncode == 0 else ""
-        except Exception as e:
-            logger.debug(f"Command '{cmd}' failed: {e}")
-            return ""
-    
-    # Try to get version string (for logging purposes only, not for logic)
-    help_output = get_help_output(f'{colmap_command} help')
-    if help_output:
-        version_match = re.search(r'COLMAP\s+([\d.]+\S*)', help_output)
-        if version_match:
-            version_string = version_match.group(1)
-    
-    # Detect feature extraction GPU option by parsing help output
-    feature_help = get_help_output(f'{colmap_command} feature_extractor --help')
-    if feature_help:
-        # Check for each possible option in the help output
-        # Order matters: check newer option names first
-        if '--FeatureExtraction.use_gpu' in feature_help:
-            feature_gpu_option = 'FeatureExtraction.use_gpu'
-        elif '--SiftExtraction.use_gpu' in feature_help:
-            feature_gpu_option = 'SiftExtraction.use_gpu'
-    
-    # Detect matching GPU option by parsing sequential_matcher help output
-    matcher_help = get_help_output(f'{colmap_command} sequential_matcher --help')
-    if matcher_help:
-        # Check for each possible option in the help output
-        # Order matters: check newer option names first
-        if '--FeatureMatching.use_gpu' in matcher_help:
-            matching_gpu_option = 'FeatureMatching.use_gpu'
-        elif '--SiftMatching.use_gpu' in matcher_help:
-            matching_gpu_option = 'SiftMatching.use_gpu'
-    
-    # Use sensible defaults if detection failed
-    if feature_gpu_option is None:
-        logger.warning("Could not detect feature GPU option, using 'SiftExtraction.use_gpu' as default")
-        feature_gpu_option = 'SiftExtraction.use_gpu'
-    
-    if matching_gpu_option is None:
-        logger.warning("Could not detect matching GPU option, using 'SiftMatching.use_gpu' as default")
-        matching_gpu_option = 'SiftMatching.use_gpu'
-    
-    options = {
-        'feature_gpu_option': feature_gpu_option,
-        'matching_gpu_option': matching_gpu_option,
-        'version': version_string
-    }
-    
-    logger.info(f"Detected COLMAP {version_string}: feature GPU option = {feature_gpu_option}, matching GPU option = {matching_gpu_option}")
-    
-    # Cache the result
-    _colmap_options_cache[cache_key] = options
-    
-    return options
-
 def get_default_magick_path():
     """Get default ImageMagick path based on operating system"""
     system = platform.system()
@@ -592,17 +502,35 @@ class SKY_SPLAT_OT_run_colmap(bpy.types.Operator):
         return colmap_instance.input_folder and os.path.exists(colmap_instance.input_folder) and colmap_instance.output_folder
     
     def execute(self, context):
+        import time
         from pathlib import Path
         from ..services.colmap import (
             run_reconstruction, FramesSource, ColmapParams, Manual,
         )
         from ..services.errors import ColmapError
 
+        start_time = time.time()
+
         props = context.scene.skysplat_colmap_props
         colmap_instance = props.colmap_instances[props.active_colmap_index]
 
-        source_path = colmap_instance.output_folder
-        input_path = Path(source_path) / "input"
+        # Validate images exist in input_folder
+        image_files = [f for f in os.listdir(colmap_instance.input_folder)
+                       if f.lower().endswith(('.jpg', '.png', '.jpeg'))]
+        if not image_files:
+            self.report({'ERROR'}, "No image files found in input folder")
+            return {'CANCELLED'}
+
+        # Create output folder and copy images into output_folder/input
+        output_folder = colmap_instance.output_folder
+        os.makedirs(output_folder, exist_ok=True)
+        input_path = Path(output_folder) / "input"
+        input_path.mkdir(parents=True, exist_ok=True)
+        for img in image_files:
+            src = os.path.join(colmap_instance.input_folder, img)
+            dst = input_path / img
+            if not dst.exists():
+                shutil.copy2(src, str(dst))
 
         sources = [FramesSource(
             path=input_path,
@@ -616,16 +544,24 @@ class SKY_SPLAT_OT_run_colmap(bpy.types.Operator):
             colmap_executable=props.colmap_path or "colmap",
         )
 
-        log_path = Path(source_path) / "colmap_run.log"
+        log_path = Path(output_folder) / "colmap_run.log"
 
         try:
-            run_reconstruction(sources, Path(source_path), params, log_path=log_path)
+            run_reconstruction(sources, Path(output_folder), params, log_path=log_path)
         except ColmapError as exc:
             self.report({'ERROR'}, f"COLMAP failed: {exc}")
             return {'CANCELLED'}
 
+        # Populate downstream paths so dependent operators unlock
+        colmap_instance.model_import_path = os.path.join(output_folder, "sparse", "0")
+        colmap_instance.images_path = os.path.join(output_folder, "images")
+        if not colmap_instance.model_export_path:
+            colmap_instance.model_export_path = os.path.join(output_folder, "transformed")
+
         colmap_instance.is_processed = True
-        self.report({'INFO'}, f"COLMAP completed for {colmap_instance.name}")
+
+        total_time = time.time() - start_time
+        self.report({'INFO'}, f"COLMAP completed for {colmap_instance.name} in {total_time:.2f}s")
         return {'FINISHED'}
 
 
