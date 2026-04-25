@@ -8,86 +8,92 @@ bl_info = {
     "category": "3D View",
 }
 
-import bpy
+try:
+    import bpy
+    _BPY_AVAILABLE = True
+except ImportError:
+    bpy = None  # type: ignore[assignment]  # running outside Blender (tests)
+    _BPY_AVAILABLE = False
 
-# Import classes from video panel
-from .ui.video_panel import (
-    VideoInstance,
-    SkySplatProperties,
-    SKY_SPLAT_PT_video_panel,
-    SKY_SPLAT_OT_add_video_instance,
-    SKY_SPLAT_OT_remove_video_instance,
-    SKY_SPLAT_OT_load_video,
-    SKY_SPLAT_OT_extract_frames,
-)
+if _BPY_AVAILABLE:
+    # Import classes from video panel
+    from .ui.video_panel import (
+        VideoInstance,
+        SkySplatProperties,
+        SKY_SPLAT_PT_video_panel,
+        SKY_SPLAT_OT_add_video_instance,
+        SKY_SPLAT_OT_remove_video_instance,
+        SKY_SPLAT_OT_load_video,
+        SKY_SPLAT_OT_extract_frames,
+    )
 
-# Import classes from colmap panel
-from .ui.colmap_panel import (
-    ColmapInstance,
-    SKY_SPLAT_ColmapProperties,
-    SKY_SPLAT_PT_colmap_panel,
-    SKY_SPLAT_OT_add_colmap_instance,
-    SKY_SPLAT_OT_remove_colmap_instance,
-    SKY_SPLAT_OT_run_colmap,
-    SKY_SPLAT_OT_sync_with_video,
-    SKY_SPLAT_OT_load_colmap_model,
-    SKY_SPLAT_OT_export_colmap_model,
-    SKY_SPLAT_OT_create_camera_animation,
-    SKY_SPLAT_OT_prepare_brush_dataset,
-)
+    # Import classes from colmap panel
+    from .ui.colmap_panel import (
+        ColmapInstance,
+        SKY_SPLAT_ColmapProperties,
+        SKY_SPLAT_PT_colmap_panel,
+        SKY_SPLAT_OT_add_colmap_instance,
+        SKY_SPLAT_OT_remove_colmap_instance,
+        SKY_SPLAT_OT_run_colmap,
+        SKY_SPLAT_OT_sync_with_video,
+        SKY_SPLAT_OT_load_colmap_model,
+        SKY_SPLAT_OT_export_colmap_model,
+        SKY_SPLAT_OT_create_camera_animation,
+        SKY_SPLAT_OT_prepare_brush_dataset,
+    )
 
-# Import classes from gaussian splatting panel
-from .ui.gaussian_splatting_panel import (
-    SplatInstance,
-    SkySplatBrushProperties,
-    SKY_SPLAT_PT_gaussian_splatting_panel,
-    SKY_SPLAT_OT_add_splat_instance,
-    SKY_SPLAT_OT_remove_splat_instance,
-    SKY_SPLAT_OT_run_brush_training,
-    SKY_SPLAT_OT_sync_brush_with_colmap,
-)
+    # Import classes from gaussian splatting panel
+    from .ui.gaussian_splatting_panel import (
+        SplatInstance,
+        SkySplatBrushProperties,
+        SKY_SPLAT_PT_gaussian_splatting_panel,
+        SKY_SPLAT_OT_add_splat_instance,
+        SKY_SPLAT_OT_remove_splat_instance,
+        SKY_SPLAT_OT_run_brush_training,
+        SKY_SPLAT_OT_sync_brush_with_colmap,
+    )
 
-classes = (
-    # Video panel
-    VideoInstance,
-    SkySplatProperties,
-    SKY_SPLAT_PT_video_panel,
-    SKY_SPLAT_OT_add_video_instance,
-    SKY_SPLAT_OT_remove_video_instance,
-    SKY_SPLAT_OT_load_video,
-    SKY_SPLAT_OT_extract_frames,
-    # COLMAP panel
-    ColmapInstance,
-    SKY_SPLAT_ColmapProperties,
-    SKY_SPLAT_PT_colmap_panel,
-    SKY_SPLAT_OT_add_colmap_instance,
-    SKY_SPLAT_OT_remove_colmap_instance,
-    SKY_SPLAT_OT_run_colmap,
-    SKY_SPLAT_OT_sync_with_video,
-    SKY_SPLAT_OT_load_colmap_model,
-    SKY_SPLAT_OT_export_colmap_model,
-    SKY_SPLAT_OT_create_camera_animation,
-    SKY_SPLAT_OT_prepare_brush_dataset,
-    # Gaussian Splatting panel
-    SplatInstance,
-    SkySplatBrushProperties,
-    SKY_SPLAT_PT_gaussian_splatting_panel,
-    SKY_SPLAT_OT_add_splat_instance,
-    SKY_SPLAT_OT_remove_splat_instance,
-    SKY_SPLAT_OT_run_brush_training,
-    SKY_SPLAT_OT_sync_brush_with_colmap,
-)
+    classes = (
+        # Video panel
+        VideoInstance,
+        SkySplatProperties,
+        SKY_SPLAT_PT_video_panel,
+        SKY_SPLAT_OT_add_video_instance,
+        SKY_SPLAT_OT_remove_video_instance,
+        SKY_SPLAT_OT_load_video,
+        SKY_SPLAT_OT_extract_frames,
+        # COLMAP panel
+        ColmapInstance,
+        SKY_SPLAT_ColmapProperties,
+        SKY_SPLAT_PT_colmap_panel,
+        SKY_SPLAT_OT_add_colmap_instance,
+        SKY_SPLAT_OT_remove_colmap_instance,
+        SKY_SPLAT_OT_run_colmap,
+        SKY_SPLAT_OT_sync_with_video,
+        SKY_SPLAT_OT_load_colmap_model,
+        SKY_SPLAT_OT_export_colmap_model,
+        SKY_SPLAT_OT_create_camera_animation,
+        SKY_SPLAT_OT_prepare_brush_dataset,
+        # Gaussian Splatting panel
+        SplatInstance,
+        SkySplatBrushProperties,
+        SKY_SPLAT_PT_gaussian_splatting_panel,
+        SKY_SPLAT_OT_add_splat_instance,
+        SKY_SPLAT_OT_remove_splat_instance,
+        SKY_SPLAT_OT_run_brush_training,
+        SKY_SPLAT_OT_sync_brush_with_colmap,
+    )
 
-def register():
-    for cls in classes:
-        bpy.utils.register_class(cls)
-    bpy.types.Scene.skysplat_props = bpy.props.PointerProperty(type=SkySplatProperties)
-    bpy.types.Scene.skysplat_colmap_props = bpy.props.PointerProperty(type=SKY_SPLAT_ColmapProperties)
-    bpy.types.Scene.skysplat_brush_props = bpy.props.PointerProperty(type=SkySplatBrushProperties)
+    def register():
+        for cls in classes:
+            bpy.utils.register_class(cls)
+        bpy.types.Scene.skysplat_props = bpy.props.PointerProperty(type=SkySplatProperties)
+        bpy.types.Scene.skysplat_colmap_props = bpy.props.PointerProperty(type=SKY_SPLAT_ColmapProperties)
+        bpy.types.Scene.skysplat_brush_props = bpy.props.PointerProperty(type=SkySplatBrushProperties)
 
-def unregister():
-    for cls in reversed(classes):
-        bpy.utils.unregister_class(cls)
-    del bpy.types.Scene.skysplat_props
-    del bpy.types.Scene.skysplat_colmap_props
-    del bpy.types.Scene.skysplat_brush_props
+    def unregister():
+        for cls in reversed(classes):
+            bpy.utils.unregister_class(cls)
+        del bpy.types.Scene.skysplat_props
+        del bpy.types.Scene.skysplat_colmap_props
+        del bpy.types.Scene.skysplat_brush_props
