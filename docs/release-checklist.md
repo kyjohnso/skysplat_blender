@@ -9,6 +9,7 @@ Run before tagging a release.
 ## Integration tests
 
 - [ ] `make test-integration` passes (requires Blender on PATH or `BLENDER=...`)
+  - Note: requires a `tests/fixtures/tiny.mp4` (~1MB sample video) to actually run; otherwise the test self-skips. Generate one with `ffmpeg -f lavfi -i testsrc=duration=2:size=320x240:rate=30 -c:v libx264 tests/fixtures/tiny.mp4` if missing.
 
 ## Manual smoke (open Blender, load addon)
 
