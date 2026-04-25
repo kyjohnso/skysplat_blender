@@ -78,3 +78,45 @@ class TestPrepareDataset:
         _write_sparse_model(sparse)
         with pytest.raises(BrushError):
             prepare_dataset(sparse, tmp_path / "missing", tmp_path / "out")
+
+
+from services.brush import BrushParams, build_command
+
+
+class TestBuildCommand:
+    def test_includes_executable_and_source(self):
+        params = BrushParams(
+            executable="/path/brush", source_path="/data/dataset",
+            export_path="/data/out",
+        )
+        cmd = build_command(params)
+        assert cmd[0] == "/path/brush"
+        assert "/data/dataset" in cmd
+        assert "--export-path" in cmd
+        assert "/data/out" in cmd
+
+    def test_appends_with_viewer_flag(self):
+        params = BrushParams(
+            executable="brush", source_path="/d", export_path="/o",
+            with_viewer=True,
+        )
+        cmd = build_command(params)
+        assert "--with-viewer" in cmd
+
+    def test_omits_optional_zero_fields(self):
+        params = BrushParams(
+            executable="brush", source_path="/d", export_path="/o",
+            max_frames=0, eval_split_every=0,
+        )
+        cmd = build_command(params)
+        assert "--max-frames" not in cmd
+        assert "--eval-split-every" not in cmd
+
+    def test_includes_optional_nonzero_fields(self):
+        params = BrushParams(
+            executable="brush", source_path="/d", export_path="/o",
+            max_frames=100, eval_split_every=10,
+        )
+        cmd = build_command(params)
+        assert "--max-frames" in cmd and "100" in cmd
+        assert "--eval-split-every" in cmd and "10" in cmd

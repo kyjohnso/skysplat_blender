@@ -90,3 +90,99 @@ def _link_or_copy_images(src: Path, dst: Path, *, force_copy: bool):
     for entry in src.iterdir():
         if entry.is_file() and entry.suffix.lower() in _IMAGE_EXTENSIONS:
             shutil.copy2(entry, dst / entry.name)
+
+
+from dataclasses import dataclass, field
+
+
+@dataclass
+class BrushParams:
+    """Parameters for a Brush training run.
+
+    Mirrors the property set on SplatInstance — intentionally one big
+    flat dataclass so callers don't have to know which Brush CLI flag
+    each property maps to.
+    """
+    executable: str
+    source_path: str
+    export_path: str = ""
+    export_name: str = "export_{iter}.ply"
+
+    # Training options
+    total_steps: int = 30000
+    ssim_weight: float = 0.2
+    lr_mean: float = 4e-5
+    lr_mean_end: float = 4e-7
+    lr_coeffs_dc: float = 3e-3
+    lr_opac: float = 5e-2
+    lr_scale: float = 5e-3
+    lr_rotation: float = 1e-3
+
+    # Dataset
+    max_resolution: int = 1920
+    subsample_frames: int = 1
+    subsample_points: int = 1
+    max_frames: int = 0           # 0 means omit
+    eval_split_every: int = 0      # 0 means omit
+
+    # Refine
+    refine_every: int = 100
+    growth_grad_threshold: float = 0.00015
+    growth_select_fraction: float = 0.1
+    growth_stop_iter: int = 12500
+    max_splats: int = 10_000_000
+
+    # Model
+    sh_degree: int = 3
+
+    # Process
+    eval_every: int = 1000
+    export_every: int = 5000
+    seed: int = 42
+    start_iter: int = 0
+
+    # Flags
+    with_viewer: bool = False
+    eval_save_to_disk: bool = False
+
+
+def build_command(params: BrushParams) -> list:
+    """Build the Brush CLI invocation as an argv list."""
+    cmd = [params.executable, params.source_path]
+    cmd += [
+        "--total-steps", str(params.total_steps),
+        "--ssim-weight", str(params.ssim_weight),
+        "--lr-mean", str(params.lr_mean),
+        "--lr-mean-end", str(params.lr_mean_end),
+        "--lr-coeffs-dc", str(params.lr_coeffs_dc),
+        "--lr-opac", str(params.lr_opac),
+        "--lr-scale", str(params.lr_scale),
+        "--lr-rotation", str(params.lr_rotation),
+        "--max-resolution", str(params.max_resolution),
+        "--subsample-frames", str(params.subsample_frames),
+        "--subsample-points", str(params.subsample_points),
+        "--refine-every", str(params.refine_every),
+        "--growth-grad-threshold", str(params.growth_grad_threshold),
+        "--growth-select-fraction", str(params.growth_select_fraction),
+        "--growth-stop-iter", str(params.growth_stop_iter),
+        "--max-splats", str(params.max_splats),
+        "--sh-degree", str(params.sh_degree),
+        "--eval-every", str(params.eval_every),
+        "--export-every", str(params.export_every),
+        "--seed", str(params.seed),
+    ]
+    if params.max_frames > 0:
+        cmd += ["--max-frames", str(params.max_frames)]
+    if params.eval_split_every > 0:
+        cmd += ["--eval-split-every", str(params.eval_split_every)]
+    if params.start_iter > 0:
+        cmd += ["--start-iter", str(params.start_iter)]
+    if params.with_viewer:
+        cmd.append("--with-viewer")
+    if params.eval_save_to_disk:
+        cmd.append("--eval-save-to-disk")
+    if params.export_path:
+        cmd += ["--export-path", params.export_path]
+    if params.export_name != "export_{iter}.ply":
+        cmd += ["--export-name", params.export_name]
+    return cmd
