@@ -578,120 +578,6 @@ def validate_input_images(input_path):
     
     return True
 
-def run_colmap_processing(colmap_path, use_gpu, colmap_instance):
-    """Run COLMAP processing with the given properties"""
-    # Get paths
-    source_path = colmap_instance.output_folder
-    input_path = os.path.join(source_path, "input")
-    database_path = os.path.join(source_path, "distorted", "database.db")
-    
-    # Validate input images first
-    logger.info("=== COLMAP Processing Started ===")
-    if not validate_input_images(input_path):
-        raise RuntimeError("Input image validation failed")
-    
-    # Configure COLMAP command
-    colmap_command = f'"{colmap_path}"' if colmap_path else "colmap"
-    use_gpu_val = 1 if use_gpu else 0
-    
-    # Get COLMAP version and appropriate options
-    colmap_options = get_colmap_version_and_options(colmap_path)
-    logger.info(f"Using COLMAP version: {colmap_options['version']}")
-    
-    # Create directories
-    os.makedirs(os.path.join(source_path, "distorted/sparse"), exist_ok=True)
-    
-    # Feature extraction
-    logger.info("=== Step 1: Feature Extraction ===")
-    feature_cmd = f'{colmap_command} feature_extractor ' \
-                 f'--database_path "{database_path}" ' \
-                 f'--image_path "{input_path}" ' \
-                 f'--ImageReader.single_camera 1 ' \
-                 f'--ImageReader.camera_model {colmap_instance.camera_model} ' \
-                 f'--{colmap_options["feature_gpu_option"]} {use_gpu_val}'
-    
-    if run_command(feature_cmd) != 0:
-        raise RuntimeError("Feature extraction failed")
-    
-    # Inspect database after feature extraction
-    logger.info("=== Feature Extraction Results ===")
-    inspect_colmap_database(database_path)
-    
-    # Feature matching - choose method based on matching_type
-    logger.info(f"=== Step 2: Feature Matching ({colmap_instance.matching_type}) ===")
-    if colmap_instance.matching_type == 'SEQUENTIAL':
-        matching_cmd = f'{colmap_command} sequential_matcher ' \
-                      f'--database_path "{database_path}" ' \
-                      f'--{colmap_options["matching_gpu_option"]} {use_gpu_val}'
-    else:  # EXHAUSTIVE
-        matching_cmd = f'{colmap_command} exhaustive_matcher ' \
-                      f'--database_path "{database_path}" ' \
-                      f'--{colmap_options["matching_gpu_option"]} {use_gpu_val}'
-    
-    if run_command(matching_cmd) != 0:
-        raise RuntimeError("Feature matching failed")
-    
-    # Inspect database after matching
-    logger.info("=== Feature Matching Results ===")
-    inspect_colmap_database(database_path)
-    
-    # Bundle adjustment
-    logger.info("=== Step 3: Bundle Adjustment (Mapper) ===")
-    mapper_cmd = f'{colmap_command} mapper ' \
-                f'--database_path "{database_path}" ' \
-                f'--image_path "{input_path}" ' \
-                f'--output_path "{source_path}/distorted/sparse" ' \
-                f'--Mapper.ba_global_function_tolerance=0.000001'
-    
-    if run_command(mapper_cmd) != 0:
-        raise RuntimeError("Bundle adjustment failed")
-    
-    # Check reconstruction results
-    sparse_dir = os.path.join(source_path, "distorted", "sparse", "0")
-    if os.path.exists(sparse_dir):
-        try:
-            cameras, images, points3D = read_model(sparse_dir)
-            logger.info(f"=== Reconstruction Results ===")
-            logger.info(f"Reconstructed {len(images)} images out of input images")
-            logger.info(f"Generated {len(points3D)} 3D points")
-            logger.info(f"Used {len(cameras)} camera models")
-            
-            if len(images) < 3:
-                logger.warning(f"WARNING: Only {len(images)} images reconstructed - this may indicate:")
-                logger.warning("1. Insufficient image overlap")
-                logger.warning("2. Poor image quality or lighting")
-                logger.warning("3. Sequential matcher not suitable for this image set")
-                logger.warning("4. Camera model mismatch")
-                logger.warning("Consider trying exhaustive matching or different camera model")
-                
-        except Exception as e:
-            logger.error(f"Could not read reconstruction results: {e}")
-    
-    # Image undistortion
-    logger.info("=== Step 4: Image Undistortion ===")
-    undist_cmd = f'{colmap_command} image_undistorter ' \
-                f'--image_path "{input_path}" ' \
-                f'--input_path "{source_path}/distorted/sparse/0" ' \
-                f'--output_path "{source_path}" ' \
-                f'--output_type COLMAP'
-    
-    if run_command(undist_cmd) != 0:
-        raise RuntimeError("Image undistortion failed")
-    
-    # Move files
-    files = os.listdir(os.path.join(source_path, "sparse"))
-    os.makedirs(os.path.join(source_path, "sparse/0"), exist_ok=True)
-    
-    for file in files:
-        if file == '0':
-            continue
-        source_file = os.path.join(source_path, "sparse", file)
-        destination_file = os.path.join(source_path, "sparse", "0", file)
-        shutil.move(source_file, destination_file)
-    
-    logger.info("=== COLMAP Processing Completed ===")
-    return True
-
 class SKY_SPLAT_OT_run_colmap(bpy.types.Operator):
     bl_idname = "skysplat.run_colmap"
     bl_label = "Run COLMAP"
@@ -706,55 +592,41 @@ class SKY_SPLAT_OT_run_colmap(bpy.types.Operator):
         return colmap_instance.input_folder and os.path.exists(colmap_instance.input_folder) and colmap_instance.output_folder
     
     def execute(self, context):
-        # Start timing
-        start_time = time.time()
-        
+        from pathlib import Path
+        from ..services.colmap import (
+            run_reconstruction, FramesSource, ColmapParams, Manual,
+        )
+        from ..services.errors import ColmapError
+
         props = context.scene.skysplat_colmap_props
         colmap_instance = props.colmap_instances[props.active_colmap_index]
-        
-        # Test if input folder contains images
-        image_files = [f for f in os.listdir(colmap_instance.input_folder)
-                      if f.lower().endswith(('.jpg', '.png', '.jpeg'))]
-        
-        if not image_files:
-            self.report({'ERROR'}, "No image files found in input folder")
-            return {'CANCELLED'}
-        
-        # Create output folder and input subfolder
-        os.makedirs(colmap_instance.output_folder, exist_ok=True)
-        input_path = os.path.join(colmap_instance.output_folder, "input")
-        os.makedirs(input_path, exist_ok=True)
-        
-        # Copy images to COLMAP input folder
-        for img in image_files:
-            src = os.path.join(colmap_instance.input_folder, img)
-            dst = os.path.join(input_path, img)
-            if not os.path.exists(dst):
-                shutil.copy2(src, dst)
-        
+
+        source_path = colmap_instance.output_folder
+        input_path = Path(source_path) / "input"
+
+        sources = [FramesSource(
+            path=input_path,
+            source_id=colmap_instance.name,
+            camera_model=Manual(model=colmap_instance.camera_model, params=[]),
+        )]
+        params = ColmapParams(
+            mode="joint",
+            matching=("sequential" if colmap_instance.matching_type == "SEQUENTIAL" else "exhaustive"),
+            use_gpu=props.use_gpu,
+            colmap_executable=props.colmap_path or "colmap",
+        )
+
+        log_path = Path(source_path) / "colmap_run.log"
+
         try:
-            # Run COLMAP processing
-            run_colmap_processing(props.colmap_path, props.use_gpu, colmap_instance)
-            
-            # Auto-update model paths after successful COLMAP run
-            colmap_instance.model_import_path = os.path.join(colmap_instance.output_folder, "sparse", "0")
-            colmap_instance.images_path = os.path.join(colmap_instance.output_folder, "images")
-            if not colmap_instance.model_export_path:
-                colmap_instance.model_export_path = os.path.join(colmap_instance.output_folder, "transformed")
-            
-            # Mark as processed
-            colmap_instance.is_processed = True
-            
-            # Calculate and print timing
-            end_time = time.time()
-            total_time = end_time - start_time
-            print(f"COLMAP processing completed in {total_time:.2f} seconds")
-            
-            self.report({'INFO'}, f"COLMAP processing completed successfully")
-            return {'FINISHED'}
-        except Exception as e:
-            self.report({'ERROR'}, f"COLMAP processing failed: {str(e)}")
+            run_reconstruction(sources, Path(source_path), params, log_path=log_path)
+        except ColmapError as exc:
+            self.report({'ERROR'}, f"COLMAP failed: {exc}")
             return {'CANCELLED'}
+
+        colmap_instance.is_processed = True
+        self.report({'INFO'}, f"COLMAP completed for {colmap_instance.name}")
+        return {'FINISHED'}
 
 
 class SKY_SPLAT_OT_prepare_brush_dataset(bpy.types.Operator):
