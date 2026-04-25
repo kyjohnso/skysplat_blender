@@ -53,6 +53,8 @@ if _BPY_AVAILABLE:
         SKY_SPLAT_OT_sync_brush_with_colmap,
     )
 
+    from . import nodes as nodes_pkg
+
     classes = (
         # Video panel
         VideoInstance,
@@ -90,8 +92,10 @@ if _BPY_AVAILABLE:
         bpy.types.Scene.skysplat_props = bpy.props.PointerProperty(type=SkySplatProperties)
         bpy.types.Scene.skysplat_colmap_props = bpy.props.PointerProperty(type=SKY_SPLAT_ColmapProperties)
         bpy.types.Scene.skysplat_brush_props = bpy.props.PointerProperty(type=SkySplatBrushProperties)
+        nodes_pkg.register()
 
     def unregister():
+        nodes_pkg.unregister()
         for cls in reversed(classes):
             bpy.utils.unregister_class(cls)
         del bpy.types.Scene.skysplat_props
