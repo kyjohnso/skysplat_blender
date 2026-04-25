@@ -10,20 +10,12 @@ Pure module: uses numpy + mathutils (both pip-installable). No bpy.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 import numpy as np
 from mathutils import Matrix, Vector
 
 from utils.read_write_model import Image, Point3D, qvec2rotmat, rotmat2qvec
 
-
-@dataclass
-class ColmapModel:
-    """In-memory COLMAP sparse model: cameras, images, points3D."""
-    cameras: dict
-    images: dict
-    points3D: dict
+from .colmap import ColmapModel
 
 
 def apply_transform(model: ColmapModel, mat4: Matrix) -> ColmapModel:
