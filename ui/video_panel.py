@@ -4,7 +4,7 @@ import time
 import re
 import shutil
 
-PANEL_VERSION = "0.4.1"  # Updated version for multi-instance support
+PANEL_VERSION = "0.4.2"  # Updated version for multi-instance support
 
 def get_all_sequences(seq_editor):
     """Get all sequences from the sequence editor (compatible with Blender 4.5 and 5.0)"""
