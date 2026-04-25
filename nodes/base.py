@@ -186,10 +186,51 @@ if HAS_BPY:
             cache = upstream.get_cached_output()
             return cache.get(sock.links[0].from_socket.identifier)
 
+    class SKYSPLAT_NODE_OT_run(bpy.types.Operator):
+        """Run a single skysplat node by name."""
+        bl_idname = "skysplat_node.run"
+        bl_label = "Run Node"
+
+        node_name: bpy.props.StringProperty()
+        tree_name: bpy.props.StringProperty(default="")  # optional override
+
+        def execute(self, context):
+            tree = self._find_tree(context)
+            if tree is None:
+                self.report({'ERROR'}, "No SkySplatNodeTree active")
+                return {'CANCELLED'}
+            node = tree.nodes.get(self.node_name)
+            if node is None:
+                self.report({'ERROR'}, f"Node not found: {self.node_name}")
+                return {'CANCELLED'}
+            node.status = "running"
+            node.last_error = ""
+            try:
+                node.run(context)
+            except Exception as exc:
+                node.store_error(str(exc))
+                self.report({'ERROR'}, f"{node.bl_label}: {exc}")
+                return {'CANCELLED'}
+            self.report({'INFO'}, f"{node.bl_label} done")
+            return {'FINISHED'}
+
+        def _find_tree(self, context):
+            if self.tree_name:
+                return bpy.data.node_groups.get(self.tree_name)
+            # Fallback: active tree in the editor where the operator was invoked
+            space = context.space_data
+            if space and getattr(space, "tree_type", "") == "SkySplatNodeTree":
+                return space.node_tree
+            # Last-resort: first SkySplatNodeTree in scene
+            for ng in bpy.data.node_groups:
+                if ng.bl_idname == "SkySplatNodeTree":
+                    return ng
+            return None
+
     # Not registered as a standalone class — subclasses register themselves.
     # Blender discovers annotated properties through the MRO when subclasses
     # are registered.
-    classes = ()
+    classes = (SKYSPLAT_NODE_OT_run,)
 
     def register():
         for cls in classes:

@@ -9,9 +9,9 @@ try:
 except ImportError:
     HAS_BPY = False
 
-from . import tree, sockets, base, add_menu
+from . import tree, sockets, base, add_menu, video_node
 
-_modules = (tree, sockets, base, add_menu)
+_modules = (tree, sockets, base, add_menu, video_node)
 
 
 def register():
