@@ -60,7 +60,9 @@ if HAS_BPY:
             layout.prop(self, "matching_type")
             layout.prop(self, "use_gpu")
             layout.prop(self, "colmap_executable", text="")
-            layout.operator("skysplat_node.run", text="Run").node_name = self.name
+            row = layout.row(align=True)
+            row.operator("skysplat_node.run", text="Run").node_name = self.name
+            row.operator("skysplat_node.view_output", text="", icon="TEXT").node_name = self.name
 
         def params_dict(self) -> dict:
             return {

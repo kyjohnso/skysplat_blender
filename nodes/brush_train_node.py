@@ -43,7 +43,9 @@ if HAS_BPY:
             layout.prop(self, "total_steps")
             layout.prop(self, "max_resolution")
             layout.prop(self, "with_viewer")
-            layout.operator("skysplat_node.run", text="Run").node_name = self.name
+            row = layout.row(align=True)
+            row.operator("skysplat_node.run", text="Run").node_name = self.name
+            row.operator("skysplat_node.view_output", text="", icon="TEXT").node_name = self.name
 
         def params_dict(self) -> dict:
             return {

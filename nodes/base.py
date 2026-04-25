@@ -227,10 +227,34 @@ if HAS_BPY:
                     return ng
             return None
 
+    class SKYSPLAT_NODE_OT_view_output(bpy.types.Operator):
+        """Open this node's run.log in the OS file viewer."""
+        bl_idname = "skysplat_node.view_output"
+        bl_label = "View Output"
+
+        node_name: bpy.props.StringProperty()
+
+        def execute(self, context):
+            space = context.space_data
+            tree = space.node_tree if space and getattr(space, "tree_type", "") == "SkySplatNodeTree" else None
+            if tree is None:
+                self.report({'ERROR'}, "Not in a SkySplat node editor")
+                return {'CANCELLED'}
+            node = tree.nodes.get(self.node_name)
+            if node is None:
+                self.report({'ERROR'}, f"Node not found: {self.node_name}")
+                return {'CANCELLED'}
+            log_path = node.get_log_path()
+            if not log_path.exists():
+                self.report({'WARNING'}, f"No log yet: {log_path}")
+                return {'CANCELLED'}
+            bpy.ops.wm.path_open(filepath=str(log_path))
+            return {'FINISHED'}
+
     # Not registered as a standalone class — subclasses register themselves.
     # Blender discovers annotated properties through the MRO when subclasses
     # are registered.
-    classes = (SKYSPLAT_NODE_OT_run,)
+    classes = (SKYSPLAT_NODE_OT_run, SKYSPLAT_NODE_OT_view_output)
 
     def register():
         for cls in classes:

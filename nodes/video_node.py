@@ -39,7 +39,9 @@ if HAS_BPY:
             if self.last_error:
                 layout.label(text=self.last_error[:80], icon="ERROR")
             layout.prop(self, "video_path", text="")
-            layout.operator("skysplat_node.run", text="Run").node_name = self.name
+            row = layout.row(align=True)
+            row.operator("skysplat_node.run", text="Run").node_name = self.name
+            row.operator("skysplat_node.view_output", text="", icon="TEXT").node_name = self.name
 
         def params_dict(self) -> dict:
             return {"video_path": str(Path(bpy.path.abspath(self.video_path))) if self.video_path else ""}

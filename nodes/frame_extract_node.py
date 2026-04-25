@@ -40,7 +40,9 @@ if HAS_BPY:
             row.prop(self, "frame_start")
             row.prop(self, "frame_end")
             row.prop(self, "frame_step")
-            layout.operator("skysplat_node.run", text="Run").node_name = self.name
+            row = layout.row(align=True)
+            row.operator("skysplat_node.run", text="Run").node_name = self.name
+            row.operator("skysplat_node.view_output", text="", icon="TEXT").node_name = self.name
 
         def params_dict(self) -> dict:
             return {

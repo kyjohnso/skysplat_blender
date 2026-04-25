@@ -31,7 +31,9 @@ if HAS_BPY:
             layout.label(text=self.status.title(), icon=icon_map.get(self.status, "DOT"))
             if self.last_error:
                 layout.label(text=self.last_error[:80], icon="ERROR")
-            layout.operator("skysplat_node.run", text="Run").node_name = self.name
+            row = layout.row(align=True)
+            row.operator("skysplat_node.run", text="Run").node_name = self.name
+            row.operator("skysplat_node.view_output", text="", icon="TEXT").node_name = self.name
 
         def params_dict(self) -> dict:
             return {}
