@@ -6,10 +6,17 @@ from pathlib import Path
 
 try:
     import bpy
-    from bpy.props import IntProperty
+    from bpy.props import IntProperty, BoolProperty
     HAS_BPY = True
 except ImportError:
     HAS_BPY = False
+
+
+def _mark_user_edited(self, context):
+    """Property-update callback — flips the user-edited flag so we
+    don't clobber manual values when an upstream Video runs again."""
+    self.params_user_edited = True
+
 
 if HAS_BPY:
     from .base import SkysplatNode
@@ -19,9 +26,10 @@ if HAS_BPY:
         bl_idname = "SkysplatFrameExtractNode"
         bl_label = "Frame Extract"
 
-        frame_start: IntProperty(name="Start", default=1, min=1)
-        frame_end: IntProperty(name="End", default=250, min=1)
-        frame_step: IntProperty(name="Step", default=5, min=1)
+        frame_start: IntProperty(name="Start", default=1, min=1, update=_mark_user_edited)
+        frame_end: IntProperty(name="End", default=250, min=1, update=_mark_user_edited)
+        frame_step: IntProperty(name="Step", default=5, min=1, update=_mark_user_edited)
+        params_user_edited: BoolProperty(name="User edited", default=False)
 
         def init(self, context):
             super().init(context)
