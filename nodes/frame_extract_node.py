@@ -53,6 +53,7 @@ if HAS_BPY:
 
         def run(self, context):
             from ..services.frames import extract_frames
+            from ..services.video import resolve_target_scene
 
             video_lineage = self.get_upstream_lineage("Video")
             if video_lineage is None:
@@ -62,11 +63,18 @@ if HAS_BPY:
             if not strip_name:
                 raise RuntimeError("Upstream Video has no VSE strip; Run the Video node first")
 
+            # Use the same scene the Video node loaded into. Fall back
+            # to live resolution if the lineage predates the fix.
+            scene_name = video_lineage.get("vse_scene_name")
+            target_scene = bpy.data.scenes.get(scene_name) if scene_name else None
+            if target_scene is None:
+                target_scene = resolve_target_scene(context)
+
             out_dir = self.get_workspace_dir() / "frames"
             out_dir.mkdir(parents=True, exist_ok=True)
 
             count = extract_frames(
-                context.scene,
+                target_scene,
                 video_strip_name=strip_name,
                 out_dir=out_dir,
                 start=self.frame_start,

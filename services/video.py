@@ -17,6 +17,31 @@ except ImportError:
     HAS_BPY = False
 
 
+def resolve_target_scene(context):
+    """Pick the right scene to host VSE strips on.
+
+    Blender 5.0+ separates `workspace.sequencer_scene` from the active
+    3D view scene. The VSE editor shows `workspace.sequencer_scene`
+    (auto-created on demand) — adding a strip to context.scene's VSE
+    when sequencer_scene is a different scene results in a strip the
+    user cannot see.
+
+    Mirrors the logic in `SKY_SPLAT_OT_load_video.execute` (the existing
+    sidebar operator) so both UIs converge on the same target scene.
+
+    Returns the scene to use. Side effect: sets workspace.sequencer_scene
+    when it was unset and the API supports it.
+    """
+    if not HAS_BPY:
+        raise RuntimeError("resolve_target_scene requires Blender (bpy).")
+    workspace = context.workspace
+    if hasattr(workspace, "sequencer_scene"):
+        if not workspace.sequencer_scene:
+            workspace.sequencer_scene = context.scene
+        return workspace.sequencer_scene
+    return context.scene
+
+
 def load_video_into_vse(
     scene,
     video_path: Path,

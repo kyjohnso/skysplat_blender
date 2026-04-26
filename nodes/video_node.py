@@ -47,7 +47,7 @@ if HAS_BPY:
             return {"video_path": str(Path(bpy.path.abspath(self.video_path))) if self.video_path else ""}
 
         def run(self, context):
-            from ..services.video import load_video_into_vse
+            from ..services.video import load_video_into_vse, resolve_target_scene
             from ..services.srt import parse_srt_metadata
 
             if not self.video_path:
@@ -57,8 +57,9 @@ if HAS_BPY:
             if not video_path.exists():
                 raise RuntimeError(f"Video file not found: {video_path}")
 
+            target_scene = resolve_target_scene(context)
             strip_name = os.path.basename(str(video_path))
-            strip = load_video_into_vse(context.scene, video_path, strip_name=strip_name)
+            strip = load_video_into_vse(target_scene, video_path, strip_name=strip_name)
 
             # SRT detection (same convention as the sidebar panel)
             srt_meta = None
@@ -74,6 +75,7 @@ if HAS_BPY:
                     "source_id": video_path.stem,
                     "vse_strip_name": strip.name,
                     "vse_strip_start_frame": int(strip.frame_start),
+                    "vse_scene_name": target_scene.name,
                     "srt_focal_len_mm": srt_meta.get("focal_len_mm") if srt_meta else None,
                 }
             }
