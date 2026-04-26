@@ -20,6 +20,21 @@ class SkySplatNodeTree(NodeTree if HAS_BPY else object):
     bl_label = "SkySplat"
     bl_icon = "NODETREE"
 
+    @classmethod
+    def get_from_context(cls, context):
+        """Return (tree, owner_id, from_id) for the active SkySplat editor.
+
+        Implementing this helps Blender's link-drag-search and other
+        editor-aware operators find our tree.
+        """
+        if not HAS_BPY:
+            return None, None, None
+        space = context.space_data
+        if space and getattr(space, "tree_type", "") == cls.bl_idname:
+            tree = space.node_tree
+            return tree, tree, tree
+        return None, None, None
+
 
 classes = (SkySplatNodeTree,) if HAS_BPY else ()
 

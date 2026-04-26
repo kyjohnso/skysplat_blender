@@ -43,8 +43,17 @@ if HAS_BPY:
 
 
     def _draw_skysplat_submenu(self, context):
-        if context.space_data.tree_type == "SkySplatNodeTree":
-            self.layout.menu(NODE_MT_skysplat_add.bl_idname, icon="NODETREE")
+        if context.space_data.tree_type != "SkySplatNodeTree":
+            return
+        # Submenu for tidy Shift-A browsing.
+        self.layout.menu(NODE_MT_skysplat_add.bl_idname, icon="NODETREE")
+        # Also draw entries inline so Blender's link-drag-search popup
+        # (which doesn't recurse into submenus on some versions) can
+        # find them by socket-type compatibility.
+        for idname, label in _entries:
+            op = self.layout.operator("node.add_node", text=label)
+            op.type = idname
+            op.use_transform = True
 
 
     classes = (NODE_MT_skysplat_add,)
