@@ -113,8 +113,9 @@ class BrushParams:
     lr_mean: float = 4e-5
     lr_mean_end: float = 4e-7
     lr_coeffs_dc: float = 3e-3
-    lr_opac: float = 5e-2
-    lr_scale: float = 5e-3
+    lr_opac: float = 3e-2
+    lr_scale: float = 1e-2
+    lr_scale_end: float = 6e-3  # must be <= lr_scale (Brush builds a decay schedule)
     lr_rotation: float = 1e-3
 
     # Dataset
@@ -156,6 +157,7 @@ def build_command(params: BrushParams) -> list:
         "--lr-coeffs-dc", str(params.lr_coeffs_dc),
         "--lr-opac", str(params.lr_opac),
         "--lr-scale", str(params.lr_scale),
+        "--lr-scale-end", str(params.lr_scale_end),
         "--lr-rotation", str(params.lr_rotation),
         "--max-resolution", str(params.max_resolution),
         "--subsample-frames", str(params.subsample_frames),

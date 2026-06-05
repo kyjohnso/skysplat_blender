@@ -123,6 +123,16 @@ class TestBuildCommand:
         assert "--max-frames" in cmd and "100" in cmd
         assert "--eval-split-every" in cmd and "10" in cmd
 
+    def test_emits_scale_end_as_valid_decay(self):
+        # Brush panics if the scale LR schedule increases (end > start), so we
+        # must always emit --lr-scale-end and keep it <= --lr-scale.
+        params = BrushParams(executable="brush", source_path="/d", export_path="/o")
+        cmd = build_command(params)
+        assert "--lr-scale" in cmd and "--lr-scale-end" in cmd
+        start = float(cmd[cmd.index("--lr-scale") + 1])
+        end = float(cmd[cmd.index("--lr-scale-end") + 1])
+        assert 0 < end <= start
+
 
 class TestRunTraining:
     def test_returns_popen_handle(self, tmp_path):

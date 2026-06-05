@@ -119,7 +119,15 @@ class SplatInstance(PropertyGroup):
         min=1e-6,
         max=1e-1
     )
-    
+
+    lr_scale_end: FloatProperty(
+        name="LR Scale End",
+        description="Final learning rate for the scale parameters; must be <= LR Scale (Brush decays from start to end)",
+        default=6e-3,
+        min=1e-6,
+        max=1e-1
+    )
+
     lr_rotation: FloatProperty(
         name="LR Rotation",
         description="Learning rate for the rotation parameters",
@@ -529,6 +537,7 @@ class SKY_SPLAT_OT_run_brush_training(Operator):
             lr_coeffs_dc=splat_instance.lr_coeffs_dc,
             lr_opac=splat_instance.lr_opac,
             lr_scale=splat_instance.lr_scale,
+            lr_scale_end=splat_instance.lr_scale_end,
             lr_rotation=splat_instance.lr_rotation,
             max_resolution=splat_instance.max_resolution,
             subsample_frames=splat_instance.subsample_frames,
@@ -672,6 +681,7 @@ class SKY_SPLAT_PT_gaussian_splatting_panel(Panel):
                     lr_box.prop(splat_instance, "lr_coeffs_dc")
                     lr_box.prop(splat_instance, "lr_opac")
                     lr_box.prop(splat_instance, "lr_scale")
+                    lr_box.prop(splat_instance, "lr_scale_end")
                     lr_box.prop(splat_instance, "lr_rotation")
                 
                 # Refinement parameters
