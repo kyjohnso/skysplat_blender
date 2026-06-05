@@ -5,6 +5,8 @@ This module contains configuration constants and settings for the SkySplat addon
 """
 
 import os
+import platform
+import subprocess
 
 # Addon metadata
 ADDON_NAME = "SkySplat: 3DGS Blender Toolkit"
@@ -52,3 +54,96 @@ def get_addon_directory():
 def get_bundled_binaries_directory():
     """Get the directory containing bundled binaries"""
     return os.path.join(get_addon_directory(), "binaries")
+
+
+def get_default_colmap_path():
+    """Get default COLMAP executable path based on operating system.
+
+    Scans common install locations per platform (and `which colmap` on
+    Linux). Returns "" if nothing is found — callers fall back to "colmap"
+    on PATH. Shared by the sidebar panel and the COLMAP node.
+    """
+    system = platform.system()
+
+    if system == "Windows":
+        possible_paths = [
+            os.path.join(os.environ.get('PROGRAMFILES', 'C:\\Program Files'), 'COLMAP', 'COLMAP.exe'),
+            os.path.join(os.environ.get('PROGRAMFILES(X86)', 'C:\\Program Files (x86)'), 'COLMAP', 'COLMAP.exe'),
+            os.path.join(os.environ.get('LOCALAPPDATA', 'C:\\Users\\User\\AppData\\Local'), 'COLMAP', 'COLMAP.exe'),
+            os.path.join(os.environ.get('PROGRAMFILES', 'C:\\Program Files'), 'COLMAP', 'bin', 'COLMAP.exe'),
+            os.path.join(os.environ.get('PROGRAMFILES(X86)', 'C:\\Program Files (x86)'), 'COLMAP', 'bin', 'COLMAP.exe'),
+            os.path.join(os.environ.get('LOCALAPPDATA', 'C:\\Users\\User\\AppData\\Local'), 'COLMAP', 'bin', 'COLMAP.exe'),
+        ]
+        for path in possible_paths:
+            if os.path.exists(path):
+                return path
+        return ""
+
+    elif system == "Darwin":  # macOS
+        possible_paths = [
+            "/Applications/COLMAP.app/Contents/MacOS/colmap",
+            "/usr/local/bin/colmap",
+            "/opt/homebrew/bin/colmap",
+            os.path.expanduser("~/Applications/COLMAP.app/Contents/MacOS/colmap"),
+        ]
+        for path in possible_paths:
+            if os.path.exists(path):
+                return path
+        return ""
+
+    elif system == "Linux":
+        # Try to find colmap in PATH first.
+        try:
+            result = subprocess.run(["which", "colmap"], capture_output=True, text=True, check=False)
+            if result.returncode == 0:
+                return result.stdout.strip()
+        except Exception:
+            pass
+
+        possible_paths = [
+            "/usr/bin/colmap",
+            "/usr/local/bin/colmap",
+        ]
+        for path in possible_paths:
+            if os.path.exists(path):
+                return path
+        return ""
+
+    return ""
+
+
+def get_default_brush_path():
+    """Get default Brush executable path based on operating system.
+
+    Prefers a bundled binary, then a user-compiled one under
+    ~/projects/brush/target/release/, and finally returns the (possibly
+    nonexistent) bundled path so the field shows where it should live.
+    Shared by the sidebar panel and the Brush Train node.
+    """
+    system = platform.system()
+
+    # First priority: bundled binaries shipped with the addon.
+    if system in BUNDLED_BINARY_NAMES:
+        bundled_binary_name = BUNDLED_BINARY_NAMES[system]
+        bundled_path = os.path.join(get_bundled_binaries_directory(), bundled_binary_name)
+        if os.path.exists(bundled_path):
+            return bundled_path
+
+    # Fallback: user-compiled binary in the conventional build location.
+    home = os.path.expanduser("~")
+    if system == "Windows":
+        user_path = os.path.join(home, "projects", "brush", "target", "release", "brush_app.exe")
+    elif system in ("Darwin", "Linux"):
+        user_path = os.path.join(home, "projects", "brush", "target", "release", "brush_app")
+    else:
+        return ""
+
+    if os.path.exists(user_path):
+        return user_path
+
+    # Neither exists — surface the bundled path so the user sees where it goes.
+    if system in BUNDLED_BINARY_NAMES:
+        bundled_binary_name = BUNDLED_BINARY_NAMES[system]
+        return os.path.join(get_bundled_binaries_directory(), bundled_binary_name)
+
+    return ""

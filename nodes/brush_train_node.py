@@ -13,13 +13,14 @@ except ImportError:
 if HAS_BPY:
     from .base import SkysplatNode
     from .add_menu import register_add_menu_entry
+    from ..config import get_default_brush_path
 
     class SkysplatBrushTrainNode(SkysplatNode):
         bl_idname = "SkysplatBrushTrainNode"
         bl_label = "Brush Train"
 
         brush_executable: StringProperty(
-            name="Brush", default="", subtype="FILE_PATH",
+            name="Brush", default=get_default_brush_path(), subtype="FILE_PATH",
             description="Path to brush_app binary",
         )
         total_steps: IntProperty(name="Total Steps", default=30000, min=100)

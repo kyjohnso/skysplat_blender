@@ -19,6 +19,7 @@ from ..utils.read_write_model import (
     read_model, write_model, qvec2rotmat, rotmat2qvec,
     Image, Point3D, Camera
 )
+from ..config import get_default_colmap_path
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -26,59 +27,6 @@ logger = logging.getLogger('SkySplat')
 
 # Panel version constant
 PANEL_VERSION = "0.4.1.graph"  # phase-1 services-extraction (issue #51 branch)
-
-def get_default_colmap_path():
-    """Get default COLMAP path based on operating system"""
-    system = platform.system()
-    
-    if system == "Windows":
-        # Common installation paths on Windows
-        possible_paths = [
-            os.path.join(os.environ.get('PROGRAMFILES', 'C:\\Program Files'), 'COLMAP', 'COLMAP.exe'),
-            os.path.join(os.environ.get('PROGRAMFILES(X86)', 'C:\\Program Files (x86)'), 'COLMAP', 'COLMAP.exe'),
-            os.path.join(os.environ.get('LOCALAPPDATA', 'C:\\Users\\User\\AppData\\Local'), 'COLMAP', 'COLMAP.exe'),
-            os.path.join(os.environ.get('PROGRAMFILES', 'C:\\Program Files'), 'COLMAP', 'bin', 'COLMAP.exe'),
-            os.path.join(os.environ.get('PROGRAMFILES(X86)', 'C:\\Program Files (x86)'), 'COLMAP', 'bin', 'COLMAP.exe'),
-            os.path.join(os.environ.get('LOCALAPPDATA', 'C:\\Users\\User\\AppData\\Local'), 'COLMAP', 'bin', 'COLMAP.exe'),
-        ]
-        for path in possible_paths:
-            if os.path.exists(path):
-                return path
-        return ""
-    
-    elif system == "Darwin":  # macOS
-        # Common installation paths on macOS
-        possible_paths = [
-            "/Applications/COLMAP.app/Contents/MacOS/colmap",
-            "/usr/local/bin/colmap",
-            "/opt/homebrew/bin/colmap",
-            os.path.expanduser("~/Applications/COLMAP.app/Contents/MacOS/colmap")
-        ]
-        for path in possible_paths:
-            if os.path.exists(path):
-                return path
-        return ""
-    
-    elif system == "Linux":
-        # Try to find colmap in PATH on Linux
-        try:
-            result = subprocess.run(["which", "colmap"], capture_output=True, text=True, check=False)
-            if result.returncode == 0:
-                return result.stdout.strip()
-        except:
-            pass
-        
-        # Common installation paths on Linux
-        possible_paths = [
-            "/usr/bin/colmap",
-            "/usr/local/bin/colmap"
-        ]
-        for path in possible_paths:
-            if os.path.exists(path):
-                return path
-        return ""
-    
-    return ""
 
 class ColmapInstance(bpy.types.PropertyGroup):
     """Individual COLMAP instance with its own settings"""

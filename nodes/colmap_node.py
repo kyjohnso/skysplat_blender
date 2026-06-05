@@ -14,6 +14,7 @@ except ImportError:
 if HAS_BPY:
     from .base import SkysplatNode
     from .add_menu import register_add_menu_entry
+    from ..config import get_default_colmap_path
 
     class SkysplatColmapNode(SkysplatNode):
         bl_idname = "SkysplatColmapNode"
@@ -39,7 +40,7 @@ if HAS_BPY:
         )
         use_gpu: BoolProperty(name="Use GPU", default=True)
         colmap_executable: StringProperty(
-            name="COLMAP", default="", subtype="FILE_PATH",
+            name="COLMAP", default=get_default_colmap_path(), subtype="FILE_PATH",
             description="Path to colmap binary (leave empty to use $PATH)",
         )
 
