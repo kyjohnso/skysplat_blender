@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import uuid as uuid_module
 from pathlib import Path
 from typing import Any
@@ -77,15 +78,58 @@ def current_param_hash(params: dict, upstream_hashes: list) -> str:
     return hashlib.sha256(blob).hexdigest()
 
 
-def default_workspace_dir(node_uuid: str, blend_path: str | None) -> Path:
+def sanitize_workspace_name(name: str) -> str:
+    """Turn a node name into a filesystem-friendly folder name.
+
+    Blender guarantees node.name is unique within a tree, so the sanitized
+    name is a stable, human-readable folder key (e.g. "COLMAP Reconstruct"
+    -> "COLMAP_Reconstruct", "Video.001" -> "Video_001"). Runs of any
+    non-word characters collapse to a single underscore.
+    """
+    safe = re.sub(r"[^\w-]+", "_", name.strip()).strip("_")
+    return safe or "node"
+
+
+def default_workspace_dir(node_name: str, blend_path: str | None) -> Path:
     """Resolve the default workspace dir for a node.
 
-    If the .blend has been saved, anchor under <blend_dir>/skysplat_workspace/<uuid>/.
-    Otherwise fall back to ~/skysplat_workspace/<uuid>/.
+    If the .blend has been saved, anchor under
+    <blend_dir>/skysplat_workspace/<node_name>/. Otherwise fall back to
+    ~/skysplat_workspace/<node_name>/.
     """
+    folder = sanitize_workspace_name(node_name)
     if blend_path:
-        return Path(blend_path).parent / "skysplat_workspace" / node_uuid
-    return Path.home() / "skysplat_workspace" / node_uuid
+        return Path(blend_path).parent / "skysplat_workspace" / folder
+    return Path.home() / "skysplat_workspace" / folder
+
+
+def tail_text(path: Path, max_bytes: int = 256 * 1024) -> str:
+    """Read up to the last max_bytes of a text file for log display.
+
+    Returns "" if the file can't be read. When the file is larger than
+    max_bytes, the partial leading line is dropped and a marker is
+    prepended so the viewer shows a clean tail instead of a mid-line splice.
+    """
+    path = Path(path)
+    try:
+        size = path.stat().st_size
+        with open(path, "rb") as f:
+            if size > max_bytes:
+                f.seek(size - max_bytes)
+                data = f.read()
+                truncated = True
+            else:
+                data = f.read()
+                truncated = False
+    except OSError:
+        return ""
+    text = data.decode("utf-8", "replace")
+    if truncated:
+        nl = text.find("\n")
+        if nl != -1:
+            text = text[nl + 1:]
+        text = f"…(showing last {max_bytes // 1024} KB)…\n" + text
+    return text
 
 
 # ----- SkysplatNode (Blender-only) -----
@@ -139,15 +183,27 @@ if HAS_BPY:
             return {}
 
         def run(self, context):
-            """Execute this node's work. Subclasses must override."""
+            """Execute this node's work synchronously. Subclasses must override."""
             raise NotImplementedError
+
+        def build_job(self, context):
+            """Optional: return a NodeJob for off-thread execution, or None.
+
+            Nodes whose heavy work is a subprocess / file IO (COLMAP, Brush
+            Train) override this to gather their inputs on the main thread
+            and hand back a NodeJob the run operator polls without freezing
+            the UI. Returning None means "run me synchronously via run()" —
+            the default for bpy-bound nodes (Video, Frame Extract) whose work
+            must stay on the main thread.
+            """
+            return None
 
         # Common helpers used by subclasses.
         def get_workspace_dir(self) -> Path:
             if self.workspace_dir_override:
                 return Path(bpy.path.abspath(self.workspace_dir_override))
             blend_path = bpy.data.filepath or ""
-            return default_workspace_dir(self.node_uuid, blend_path)
+            return default_workspace_dir(self.name, blend_path)
 
         def get_log_path(self) -> Path:
             return self.get_workspace_dir() / "run.log"
@@ -187,7 +243,14 @@ if HAS_BPY:
             return cache.get(sock.links[0].from_socket.identifier)
 
     class SKYSPLAT_NODE_OT_run(bpy.types.Operator):
-        """Run a single skysplat node by name."""
+        """Run a single skysplat node by name.
+
+        Background-capable nodes (those whose build_job() returns a NodeJob)
+        run their heavy work on a worker thread while this operator goes
+        modal, polling the job from a timer so Blender's UI stays responsive.
+        Nodes that return None run synchronously on the main thread — the
+        right place for bpy-bound work (VSE load, OpenGL frame render).
+        """
         bl_idname = "skysplat_node.run"
         bl_label = "Run Node"
 
@@ -203,16 +266,108 @@ if HAS_BPY:
             if node is None:
                 self.report({'ERROR'}, f"Node not found: {self.node_name}")
                 return {'CANCELLED'}
+
+            # Re-resolve the node by name each modal tick rather than holding
+            # a direct reference — undo / node deletion would invalidate it.
+            self._tree_name = tree.name
+            self._node_name = node.name
+            self._job = None
+            self._timer = None
+
             node.status = "running"
             node.last_error = ""
+
+            # Outputs land beside the .blend; warn if it's unsaved so the
+            # user isn't surprised to find them in ~/skysplat_workspace.
+            if not bpy.data.filepath and not node.workspace_dir_override:
+                self.report(
+                    {'WARNING'},
+                    "Unsaved .blend — outputs go to ~/skysplat_workspace; "
+                    "save your file to keep them with the project",
+                )
+
+            # Gather inputs on the main thread (this reads bpy). Background
+            # nodes hand back a NodeJob; others return None to run inline.
             try:
-                node.run(context)
+                job = node.build_job(context)
             except Exception as exc:
                 node.store_error(str(exc))
+                self._tag_redraw(context)
                 self.report({'ERROR'}, f"{node.bl_label}: {exc}")
                 return {'CANCELLED'}
+
+            if job is None:
+                # Synchronous fallback for bpy-bound / trivial nodes.
+                try:
+                    node.run(context)
+                except Exception as exc:
+                    node.store_error(str(exc))
+                    self._tag_redraw(context)
+                    self.report({'ERROR'}, f"{node.bl_label}: {exc}")
+                    return {'CANCELLED'}
+                self._tag_redraw(context)
+                self.report({'INFO'}, f"{node.bl_label} done")
+                return {'FINISHED'}
+
+            # Non-blocking path: run off-thread, poll from a timer.
+            self._job = job
+            job.start()
+            wm = context.window_manager
+            self._timer = wm.event_timer_add(0.2, window=context.window)
+            wm.modal_handler_add(self)
+            self._tag_redraw(context)
+            self.report({'INFO'}, f"{node.bl_label} started in background…")
+            return {'RUNNING_MODAL'}
+
+        def modal(self, context, event):
+            if event.type != 'TIMER':
+                return {'PASS_THROUGH'}
+            if not self._job.finished:
+                return {'PASS_THROUGH'}
+
+            self._remove_timer(context)
+            node = self._resolve_node()
+            if node is None:
+                # Node was deleted mid-run — nothing to write back.
+                return {'CANCELLED'}
+
+            if self._job.error is not None:
+                node.store_error(str(self._job.error))
+                self._tag_redraw(context)
+                self.report({'ERROR'}, f"{node.bl_label}: {self._job.error}")
+                return {'CANCELLED'}
+
+            node.store_output(self._job.result, self._job.params)
+            self._tag_redraw(context)
             self.report({'INFO'}, f"{node.bl_label} done")
             return {'FINISHED'}
+
+        def cancel(self, context):
+            # Blender calls this if the operator is aborted (e.g. window closed).
+            if self._job is not None:
+                self._job.cancel()
+            self._remove_timer(context)
+            node = self._resolve_node()
+            if node is not None and node.status == "running":
+                node.store_error("Cancelled")
+                self._tag_redraw(context)
+
+        def _resolve_node(self):
+            tree = bpy.data.node_groups.get(self._tree_name)
+            if tree is None:
+                return None
+            return tree.nodes.get(self._node_name)
+
+        def _remove_timer(self, context):
+            if self._timer is not None:
+                context.window_manager.event_timer_remove(self._timer)
+                self._timer = None
+
+        def _tag_redraw(self, context):
+            for window in context.window_manager.windows:
+                for area in window.screen.areas:
+                    if area.type == 'NODE_EDITOR':
+                        area.tag_redraw()
 
         def _find_tree(self, context):
             if self.tree_name:
@@ -228,15 +383,21 @@ if HAS_BPY:
             return None
 
     class SKYSPLAT_NODE_OT_view_output(bpy.types.Operator):
-        """Open this node's run.log in the OS file viewer."""
+        """Show this node's run.log in a Text editor, auto-scrolled to the
+        bottom and live-following new output while the node is running.
+
+        Reuses an existing Text editor if one is open; otherwise opens a
+        dedicated window. Falls back to the OS file viewer if no editor can
+        be created (e.g. headless).
+        """
         bl_idname = "skysplat_node.view_output"
         bl_label = "View Output"
 
         node_name: bpy.props.StringProperty()
+        tree_name: bpy.props.StringProperty(default="")
 
         def execute(self, context):
-            space = context.space_data
-            tree = space.node_tree if space and getattr(space, "tree_type", "") == "SkySplatNodeTree" else None
+            tree = self._find_tree(context)
             if tree is None:
                 self.report({'ERROR'}, "Not in a SkySplat node editor")
                 return {'CANCELLED'}
@@ -248,8 +409,150 @@ if HAS_BPY:
             if not log_path.exists():
                 self.report({'WARNING'}, f"No log yet: {log_path}")
                 return {'CANCELLED'}
-            bpy.ops.wm.path_open(filepath=str(log_path))
-            return {'FINISHED'}
+
+            self._tree_name = tree.name
+            self._node_name = node.name
+            self._log_path = log_path
+            self._text_name = f"SkySplat Log: {node.name}"
+            self._stamp = None
+            self._settle = 3
+            self._timer = None
+
+            text = self._load_text()
+            try:
+                self._show_in_editor(context, text)
+            except Exception as exc:
+                self.report({'WARNING'}, f"Couldn't open Text editor ({exc}); opening externally")
+                bpy.ops.wm.path_open(filepath=str(log_path))
+                return {'FINISHED'}
+
+            wm = context.window_manager
+            self._timer = wm.event_timer_add(0.3, window=context.window)
+            wm.modal_handler_add(self)
+            return {'RUNNING_MODAL'}
+
+        def modal(self, context, event):
+            if event.type != 'TIMER':
+                return {'PASS_THROUGH'}
+
+            text = bpy.data.texts.get(self._text_name)
+            area = self._find_area_showing(text) if text else None
+            if text is None or area is None:
+                # User closed or repurposed the log view — stop following.
+                self._remove_timer(context)
+                return {'FINISHED'}
+
+            changed = self._reload_if_changed(text)
+            node = self._resolve_node()
+            running = node is not None and node.status == "running"
+
+            # Pin to the bottom while there's new output, and for a few ticks
+            # after the area first appears (visible_lines is 0 until drawn).
+            # Once the run is done and output settles, stop pinning so the
+            # user can scroll freely.
+            if changed or running or self._settle > 0:
+                self._pin_bottom(area, text)
+
+            if running:
+                self._settle = 3
+            elif not changed:
+                self._settle -= 1
+                if self._settle <= 0:
+                    self._remove_timer(context)
+                    return {'FINISHED'}
+            return {'PASS_THROUGH'}
+
+        def cancel(self, context):
+            self._remove_timer(context)
+
+        # ----- helpers -----
+        def _load_text(self):
+            text = bpy.data.texts.get(self._text_name)
+            if text is None:
+                text = bpy.data.texts.new(self._text_name)
+            text.from_string(tail_text(self._log_path))
+            self._stamp = self._file_stamp()
+            return text
+
+        def _file_stamp(self):
+            try:
+                st = self._log_path.stat()
+                return (st.st_size, st.st_mtime)
+            except OSError:
+                return None
+
+        def _reload_if_changed(self, text):
+            stamp = self._file_stamp()
+            if stamp != self._stamp:
+                text.from_string(tail_text(self._log_path))
+                self._stamp = stamp
+                return True
+            return False
+
+        def _text_editors(self):
+            for win in bpy.context.window_manager.windows:
+                for area in win.screen.areas:
+                    if area.type == 'TEXT_EDITOR' and area.spaces.active:
+                        yield area
+
+        def _find_area_showing(self, text):
+            for area in self._text_editors():
+                if area.spaces.active.text == text:
+                    return area
+            return None
+
+        def _show_in_editor(self, context, text):
+            area = self._find_area_showing(text)
+            if area is None:
+                existing = list(self._text_editors())
+                if existing:
+                    area = existing[0]
+                else:
+                    bpy.ops.wm.window_new()
+                    win = context.window_manager.windows[-1]
+                    area = win.screen.areas[0]
+                    area.type = 'TEXT_EDITOR'
+            space = area.spaces.active
+            space.text = text
+            space.show_line_numbers = True
+            space.show_word_wrap = True
+            area.tag_redraw()
+            return area
+
+        def _pin_bottom(self, area, text):
+            space = area.spaces.active
+            n = len(text.lines)
+            if n == 0:
+                return
+            vis = space.visible_lines
+            space.top = max(0, n - vis) if vis and vis > 0 else max(0, n - 1)
+            try:
+                text.cursor_set(n - 1)
+            except Exception:
+                pass
+            area.tag_redraw()
+
+        def _resolve_node(self):
+            tree = bpy.data.node_groups.get(self._tree_name)
+            if tree is None:
+                return None
+            return tree.nodes.get(self._node_name)
+
+        def _remove_timer(self, context):
+            if self._timer is not None:
+                context.window_manager.event_timer_remove(self._timer)
+                self._timer = None
+
+        def _find_tree(self, context):
+            if self.tree_name:
+                return bpy.data.node_groups.get(self.tree_name)
+            space = context.space_data
+            if space and getattr(space, "tree_type", "") == "SkySplatNodeTree":
+                return space.node_tree
+            for ng in bpy.data.node_groups:
+                if ng.bl_idname == "SkySplatNodeTree":
+                    return ng
+            return None
 
     # Not registered as a standalone class — subclasses register themselves.
     # Blender discovers annotated properties through the MRO when subclasses

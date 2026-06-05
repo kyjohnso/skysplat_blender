@@ -55,8 +55,9 @@ if HAS_BPY:
                 "with_viewer": self.with_viewer,
             }
 
-        def run(self, context):
+        def build_job(self, context):
             from ..services.brush import run_training, BrushParams
+            from .jobs import NodeJob
 
             dataset_lineage = self.get_upstream_lineage("Dataset")
             if dataset_lineage is None:
@@ -80,23 +81,31 @@ if HAS_BPY:
                 max_resolution=self.max_resolution,
                 with_viewer=self.with_viewer,
             )
+            log_path = self.get_log_path()
 
-            popen = run_training(params, log_path=self.get_log_path())
-
-            # MVP: synchronous-ish — wait for completion before returning.
-            # Phase 2.5 will replace this with modal-timer polling so the
-            # UI stays responsive. For long trainings, the user will use
-            # `with_viewer=True` to monitor externally.
-            popen.wait()
-            if popen.returncode != 0:
-                raise RuntimeError(f"Brush training failed with code {popen.returncode}; see log: {self.get_log_path()}")
-
-            output = {
-                "Splat": {
-                    "ply_path": str(export_path),  # path to dir of .ply outputs
-                    "training_log": str(self.get_log_path()),
+            # Runs on a worker thread: launch Brush and wait on it there so
+            # Blender's main thread stays responsive. register_proc lets the
+            # run operator terminate training if the op is cancelled.
+            def work(register_proc):
+                popen = run_training(params, log_path=log_path)
+                register_proc(popen)
+                popen.wait()
+                if popen.returncode != 0:
+                    raise RuntimeError(
+                        f"Brush training failed with code {popen.returncode}; see log: {log_path}"
+                    )
+                return {
+                    "Splat": {
+                        "ply_path": str(export_path),  # path to dir of .ply outputs
+                        "training_log": str(log_path),
+                    }
                 }
-            }
+
+            return NodeJob(work, self.params_dict())
+
+        def run(self, context):
+            job = self.build_job(context)
+            output = job.run_blocking()
             self.store_output(output, self.params_dict())
 
 

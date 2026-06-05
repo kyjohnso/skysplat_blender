@@ -72,10 +72,11 @@ if HAS_BPY:
                 "colmap_executable": self.colmap_executable,
             }
 
-        def run(self, context):
+        def build_job(self, context):
             from ..services.colmap import (
                 run_reconstruction, FramesSource, ColmapParams, Manual,
             )
+            from .jobs import NodeJob
 
             frames_lineage = self.get_upstream_lineage("Frames")
             if frames_lineage is None:
@@ -101,15 +102,22 @@ if HAS_BPY:
             workspace.mkdir(parents=True, exist_ok=True)
             log_path = self.get_log_path()
 
-            result = run_reconstruction(sources, workspace, params, log_path=log_path)
-
-            output = {
-                "Model": {
-                    "model_dir": result.model_dir,
-                    "image_root": result.image_root,
-                    "source_map": {str(k): v for k, v in result.source_map.items()},
+            # Runs on a worker thread — pure subprocess + file IO, no bpy.
+            def work(register_proc):
+                result = run_reconstruction(sources, workspace, params, log_path=log_path)
+                return {
+                    "Model": {
+                        "model_dir": result.model_dir,
+                        "image_root": result.image_root,
+                        "source_map": {str(k): v for k, v in result.source_map.items()},
+                    }
                 }
-            }
+
+            return NodeJob(work, self.params_dict())
+
+        def run(self, context):
+            job = self.build_job(context)
+            output = job.run_blocking()
             self.store_output(output, self.params_dict())
 
 
