@@ -12,3 +12,5 @@ releases
 .superpowers/
 .pytest_cache/
 tests/__pycache__/
+
+test_runs/
