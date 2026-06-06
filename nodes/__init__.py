@@ -12,13 +12,13 @@ except ImportError:
 from . import (
     tree, sockets, base, add_menu,
     video_node, frames_folder_node, frame_extract_node, colmap_node,
-    brush_dataset_node, brush_train_node,
+    brush_dataset_node, brush_train_node, splat_output_node,
 )
 
 _modules = (
     tree, sockets, base, add_menu,
     video_node, frames_folder_node, frame_extract_node, colmap_node,
-    brush_dataset_node, brush_train_node,
+    brush_dataset_node, brush_train_node, splat_output_node,
 )
 
 
