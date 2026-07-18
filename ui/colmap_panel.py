@@ -20,6 +20,10 @@ from ..utils.read_write_model import (
     Image, Point3D, Camera
 )
 from ..config import get_default_colmap_path
+from ..services.coords import (
+    pose_to_blender_matrix, export_world_transform,
+    focal_px_to_mm, continuous_quaternions,
+)
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -553,45 +557,11 @@ class SKY_SPLAT_OT_load_colmap_model(bpy.types.Operator):
                 
                 # Set focal length if available
                 if hasattr(camera, 'params') and len(camera.params) > 0:
-                    focal_length_pixels = camera.params[0]
-                    sensor_width_mm = 36.0  # Standard full frame width
-                    focal_length_mm = (focal_length_pixels * sensor_width_mm) / camera.width
-                    cam_data.lens = focal_length_mm
-                
-                # Camera transformation
-                # In COLMAP, camera transform is world-to-camera, but Blender expects camera-to-world
-                
-                # Get rotation matrix from quaternion
-                R = qvec2rotmat(image.qvec)
-                R = np.array(R)
-                
-                # Get translation vector
-                t = np.array(image.tvec)
-                
-                # Compute camera center in world coordinates: C = -R^T * t
-                cam_center = -R.T @ t
-                
-                # For Blender, we need the camera-to-world transformation
-                # The rotation part is R^T (inverse of world-to-camera rotation)
-                R_cam_to_world = R.T
-                
-                # Convert to Blender matrix format
-                rotation_matrix = mathutils.Matrix((
-                    (R_cam_to_world[0][0], R_cam_to_world[0][1], R_cam_to_world[0][2]),
-                    (R_cam_to_world[1][0], R_cam_to_world[1][1], R_cam_to_world[1][2]),
-                    (R_cam_to_world[2][0], R_cam_to_world[2][1], R_cam_to_world[2][2])
-                )).to_4x4()
-                
-                # Set camera location
-                rotation_matrix.translation = Vector((cam_center[0], cam_center[1], cam_center[2]))
-                
-                # Apply coordinate system transformation to fix camera orientation
-                # COLMAP uses a different camera coordinate system than Blender
-                # We need to rotate 180 degrees around X-axis to flip the camera right-side up
-                x_rotation = mathutils.Matrix.Rotation(math.pi, 4, 'X')
-                
-                # Set the final camera transformation
-                cam_obj.matrix_world = rotation_matrix @ x_rotation
+                    cam_data.lens = focal_px_to_mm(camera.params[0], camera.width)
+
+                # COLMAP stores world-to-camera; the service inverts it and
+                # applies the shared COLMAP->Blender camera axis flip.
+                cam_obj.matrix_world = pose_to_blender_matrix(image.qvec, image.tvec)
                 
                 # Store COLMAP IDs and original filename information
                 cam_obj['colmap_image_id'] = image_id
@@ -674,12 +644,10 @@ class SKY_SPLAT_OT_export_colmap_model(bpy.types.Operator):
 
             model = read_model(Path(source_path))
 
-            # Build the world transform from the COLMAP_Root empty's matrix_world.
-            # The historical export logic also undid the X-axis flip applied
-            # during import — replicate that by composing an X-rotation inverse
-            # into the transform.
-            x_flip_inv = mathutils.Matrix.Rotation(-math.pi, 4, 'X')
-            world_xform = root.matrix_world @ x_flip_inv
+            # Build the world transform from the COLMAP_Root empty's matrix_world,
+            # composed with the shared convention flip (undoes the camera axis
+            # flip applied during import).
+            world_xform = export_world_transform(root.matrix_world)
 
             transformed = apply_transform(model, world_xform)
 
@@ -801,10 +769,7 @@ class SKY_SPLAT_OT_create_camera_animation(bpy.types.Operator):
                     cam_data.lens_unit = 'MILLIMETERS'
 
                     if hasattr(colmap_camera, 'params') and len(colmap_camera.params) > 0:
-                        focal_length_pixels = colmap_camera.params[0]
-                        sensor_width_mm = 36.0  # Standard full frame width
-                        focal_length_mm = (focal_length_pixels * sensor_width_mm) / colmap_camera.width
-                        cam_data.lens = focal_length_mm
+                        cam_data.lens = focal_px_to_mm(colmap_camera.params[0], colmap_camera.width)
 
                     logger.info(f"Set camera resolution to {colmap_camera.width}x{colmap_camera.height}")
 
@@ -835,15 +800,9 @@ class SKY_SPLAT_OT_create_camera_animation(bpy.types.Operator):
                 locations.append(loc)
                 quaternions.append(rot_quat)
 
-            # Ensure quaternion continuity by making sure each quaternion is in the same hemisphere
-            # as the previous one (avoiding 180-degree flips)
-            for i in range(1, len(quaternions)):
-                # Check if we need to flip the quaternion to maintain continuity
-                # q and -q represent the same rotation, so we pick the one closer to the previous
-                dot_product = quaternions[i].dot(quaternions[i-1])
-                if dot_product < 0:
-                    # Flip the quaternion to maintain continuity
-                    quaternions[i].negate()
+            # Ensure quaternion continuity (q and -q are the same rotation;
+            # keep consecutive keys in the same hemisphere).
+            quaternions = continuous_quaternions(quaternions)
 
             # Create keyframes for each frame
             for i, frame_num in enumerate(sorted_frames):
