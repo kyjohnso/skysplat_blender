@@ -24,6 +24,7 @@ from ..services.coords import (
     pose_to_blender_matrix, export_world_transform,
     focal_px_to_mm, continuous_quaternions,
 )
+from ..services.camera import parse_frame_number
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -701,27 +702,16 @@ class SKY_SPLAT_OT_create_camera_animation(bpy.types.Operator):
                 self.report({'ERROR'}, "No COLMAP cameras found for this instance")
                 return {'CANCELLED'}
 
-            # Parse frame numbers from camera names
+            # Parse frame numbers — prefer the original COLMAP image filename
+            # (stored on load) over the object name, which Blender may have
+            # suffixed (".001") or the user renamed.
             frame_camera_map = {}
             for cam_obj in colmap_cameras:
-                # Get the camera name (e.g., "Camera_frame_00001" or "Camera_frame_00001.001")
-                cam_name = cam_obj.name
-
-                # Extract the frame number
-                # Look for pattern like "frame_00001" or just the numeric part
-                # Try to find frame_XXXXX pattern first
-                match = re.search(r'frame[_-]?(\d+)', cam_name, re.IGNORECASE)
-                if match:
-                    frame_num = int(match.group(1))
-                else:
-                    # Try to find just a number sequence
-                    match = re.search(r'(\d{4,})', cam_name)
-                    if match:
-                        frame_num = int(match.group(1))
-                    else:
-                        logger.warning(f"Could not parse frame number from camera name: {cam_name}")
-                        continue
-
+                source_name = cam_obj.get('original_filename') or cam_obj.name
+                frame_num = parse_frame_number(source_name)
+                if frame_num is None:
+                    logger.warning(f"Could not parse frame number from camera: {cam_obj.name}")
+                    continue
                 frame_camera_map[frame_num] = cam_obj
 
             if not frame_camera_map:
