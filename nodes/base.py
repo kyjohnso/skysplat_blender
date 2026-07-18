@@ -532,17 +532,38 @@ if HAS_BPY:
             return area
 
         def _pin_bottom(self, area, text):
+            """Scroll the log view to the bottom via the editor's own
+            FILE_BOTTOM move. Manual `space.top` math doesn't work here:
+            with word wrap on, `top` counts wrapped DISPLAY rows, not
+            logical lines, so `top = lines - visible_lines` lands further
+            and further above the real bottom as the log grows."""
             space = area.spaces.active
             n = len(text.lines)
             if n == 0:
                 return
-            vis = space.visible_lines
-            space.top = max(0, n - vis) if vis and vis > 0 else max(0, n - 1)
+            win = self._window_of(area)
+            region = next((r for r in area.regions if r.type == 'WINDOW'), None)
             try:
-                text.cursor_set(n - 1)
+                with bpy.context.temp_override(
+                    window=win, area=area, region=region, space_data=space,
+                ):
+                    bpy.ops.text.move(type='FILE_BOTTOM')
             except Exception:
-                pass
+                # Fallback (exact when word wrap is off).
+                vis = space.visible_lines
+                space.top = max(0, n - vis) if vis and vis > 0 else max(0, n - 1)
+                try:
+                    text.cursor_set(n - 1)
+                except Exception:
+                    pass
             area.tag_redraw()
+
+        def _window_of(self, area):
+            for win in bpy.context.window_manager.windows:
+                for a in win.screen.areas:
+                    if a == area:
+                        return win
+            return None
 
         def _resolve_node(self):
             tree = bpy.data.node_groups.get(self._tree_name)
