@@ -48,11 +48,21 @@ from services.colmap import (
 
 class TestRunReconstruction:
     def _fake_run(self, returncode=0):
+        # Used for the get_colmap_version_and_options help probe (subprocess.run).
         result = MagicMock(spec=subprocess.CompletedProcess)
         result.returncode = returncode
         result.stdout = "ok"
         result.stderr = ""
         return result
+
+    def _fake_popen(self, returncode=0):
+        # COLMAP steps now run via Popen so they can be terminated mid-run.
+        # (No spec= — subprocess.Popen is itself patched in these tests.)
+        p = MagicMock()
+        p.wait.return_value = returncode
+        p.poll.return_value = returncode
+        p.returncode = returncode
+        return p
 
     def test_calls_colmap_in_correct_sequence(self, tmp_path):
         sources = [FramesSource(
@@ -69,17 +79,19 @@ class TestRunReconstruction:
         workspace = tmp_path / "ws"
 
         with patch("services.colmap.subprocess.run") as run_mock, \
+             patch("services.colmap.subprocess.Popen") as popen_mock, \
              patch("services.colmap._read_resulting_model") as read_mock:
             run_mock.side_effect = lambda *a, **kw: self._fake_run(0)
+            popen_mock.side_effect = lambda *a, **kw: self._fake_popen(0)
             read_mock.return_value = ColmapModel(cameras={}, images={}, points3D={})
 
             result = run_reconstruction(sources, workspace, params, log_path=tmp_path / "log")
 
-        # Verify the correct sequence of calls: feature_extractor, matcher, mapper, undistorter
-        commands = [c.args[0] for c in run_mock.call_args_list]
-        assert any("feature_extractor" in " ".join(c) for c in commands)
-        assert any("exhaustive_matcher" in " ".join(c) for c in commands)
-        assert any("mapper" in " ".join(c) for c in commands)
+        # COLMAP steps go through Popen; assert the sequence there.
+        commands = [c.args[0] for c in popen_mock.call_args_list]
+        assert any("feature_extractor" in c for c in commands)
+        assert any("exhaustive_matcher" in c for c in commands)
+        assert any("mapper" in c for c in commands)
         assert isinstance(result, ColmapResult)
 
     def test_raises_colmap_error_on_failure(self, tmp_path):
@@ -87,8 +99,10 @@ class TestRunReconstruction:
         (tmp_path / "frames").mkdir()
         for i in range(3):
             (tmp_path / "frames" / f"f{i}.png").write_bytes(b"")
-        with patch("services.colmap.subprocess.run") as run_mock:
-            run_mock.return_value = self._fake_run(1)
+        with patch("services.colmap.subprocess.run") as run_mock, \
+             patch("services.colmap.subprocess.Popen") as popen_mock:
+            run_mock.side_effect = lambda *a, **kw: self._fake_run(0)
+            popen_mock.side_effect = lambda *a, **kw: self._fake_popen(1)  # step fails
             with pytest.raises(ColmapError):
                 run_reconstruction(
                     sources, tmp_path / "ws",
@@ -102,8 +116,10 @@ class TestRunReconstruction:
         for i in range(3):
             (tmp_path / "frames" / f"f{i}.png").write_bytes(b"")
         with patch("services.colmap.subprocess.run") as run_mock, \
+             patch("services.colmap.subprocess.Popen") as popen_mock, \
              patch("services.colmap._read_resulting_model") as read_mock:
             run_mock.side_effect = lambda *a, **kw: self._fake_run(0)
+            popen_mock.side_effect = lambda *a, **kw: self._fake_popen(0)
             read_mock.return_value = ColmapModel(cameras={}, images={}, points3D={})
             result = run_reconstruction(
                 sources, tmp_path / "ws",
@@ -115,15 +131,22 @@ class TestRunReconstruction:
 
 
 class TestMergeModels:
+    def _fake_popen(self, returncode=0):
+        p = MagicMock()
+        p.wait.return_value = returncode
+        p.poll.return_value = returncode
+        p.returncode = returncode
+        return p
+
     def test_invokes_model_merger_subcommand(self, tmp_path):
         a = tmp_path / "a"
         b = tmp_path / "b"
         out = tmp_path / "out"
         a.mkdir(); b.mkdir()
-        with patch("services.colmap.subprocess.run") as run_mock:
-            run_mock.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        with patch("services.colmap.subprocess.Popen") as popen_mock:
+            popen_mock.side_effect = lambda *a, **kw: self._fake_popen(0)
             result = merge_models(a, b, out, log_path=tmp_path / "log")
-        cmd = run_mock.call_args.args[0]
+        cmd = popen_mock.call_args.args[0]
         assert cmd[0] == "colmap"
         assert cmd[1] == "model_merger"
         assert "--input_path1" in cmd
@@ -132,19 +155,19 @@ class TestMergeModels:
 
     def test_raises_on_failure(self, tmp_path):
         a = tmp_path / "a"; b = tmp_path / "b"; a.mkdir(); b.mkdir()
-        with patch("services.colmap.subprocess.run") as run_mock:
-            run_mock.return_value = MagicMock(returncode=1, stdout="", stderr="boom")
+        with patch("services.colmap.subprocess.Popen") as popen_mock:
+            popen_mock.side_effect = lambda *a, **kw: self._fake_popen(1)
             with pytest.raises(ColmapError):
                 merge_models(a, b, tmp_path / "out", log_path=tmp_path / "log")
 
     def test_uses_custom_executable(self, tmp_path):
         a = tmp_path / "a"; b = tmp_path / "b"; a.mkdir(); b.mkdir()
-        with patch("services.colmap.subprocess.run") as run_mock:
-            run_mock.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        with patch("services.colmap.subprocess.Popen") as popen_mock:
+            popen_mock.side_effect = lambda *a, **kw: self._fake_popen(0)
             merge_models(
                 a, b, tmp_path / "out",
                 log_path=tmp_path / "log",
                 colmap_executable="/custom/path/colmap",
             )
-        cmd = run_mock.call_args.args[0]
+        cmd = popen_mock.call_args.args[0]
         assert cmd[0] == "/custom/path/colmap"

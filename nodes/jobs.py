@@ -16,6 +16,23 @@ import threading
 from typing import Callable
 
 
+# Registry of in-flight jobs so a Stop button (a separate operator) can reach
+# the job owned by the running Run modal operator. Keyed by (tree, node) name.
+_RUNNING: dict[tuple[str, str], "NodeJob"] = {}
+
+
+def register_running(tree_name: str, node_name: str, job: "NodeJob") -> None:
+    _RUNNING[(tree_name, node_name)] = job
+
+
+def unregister_running(tree_name: str, node_name: str) -> None:
+    _RUNNING.pop((tree_name, node_name), None)
+
+
+def get_running(tree_name: str, node_name: str):
+    return _RUNNING.get((tree_name, node_name))
+
+
 class NodeJob:
     """A unit of off-thread work produced by a node's build_job().
 
@@ -32,6 +49,7 @@ class NodeJob:
         self.result: dict | None = None
         self.error: BaseException | None = None
         self.finished = False
+        self.cancelled = False
         self._thread: threading.Thread | None = None
         self._proc = None
         self._lock = threading.Lock()
@@ -62,7 +80,8 @@ class NodeJob:
         return self._work(self._register_proc)
 
     def cancel(self) -> None:
-        """Terminate the registered subprocess, if any is still running."""
+        """Flag the job stopped and terminate its subprocess, if running."""
+        self.cancelled = True
         with self._lock:
             proc = self._proc
         if proc is not None and proc.poll() is None:

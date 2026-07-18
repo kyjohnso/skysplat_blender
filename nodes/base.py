@@ -310,8 +310,10 @@ if HAS_BPY:
                 return {'FINISHED'}
 
             # Non-blocking path: run off-thread, poll from a timer.
+            from .jobs import register_running
             self._job = job
             job.start()
+            register_running(self._tree_name, self._node_name, job)
             wm = context.window_manager
             self._timer = wm.event_timer_add(0.2, window=context.window)
             wm.modal_handler_add(self)
@@ -325,10 +327,18 @@ if HAS_BPY:
             if not self._job.finished:
                 return {'PASS_THROUGH'}
 
+            from .jobs import unregister_running
             self._remove_timer(context)
+            unregister_running(self._tree_name, self._node_name)
             node = self._resolve_node()
             if node is None:
                 # Node was deleted mid-run — nothing to write back.
+                return {'CANCELLED'}
+
+            if self._job.cancelled:
+                node.store_error("Stopped")
+                self._tag_redraw(context)
+                self.report({'WARNING'}, f"{node.bl_label} stopped")
                 return {'CANCELLED'}
 
             if self._job.error is not None:
@@ -344,12 +354,14 @@ if HAS_BPY:
 
         def cancel(self, context):
             # Blender calls this if the operator is aborted (e.g. window closed).
+            from .jobs import unregister_running
             if self._job is not None:
                 self._job.cancel()
             self._remove_timer(context)
+            unregister_running(self._tree_name, self._node_name)
             node = self._resolve_node()
             if node is not None and node.status == "running":
-                node.store_error("Cancelled")
+                node.store_error("Stopped")
                 self._tag_redraw(context)
 
         def _resolve_node(self):
@@ -554,10 +566,33 @@ if HAS_BPY:
                     return ng
             return None
 
+    class SKYSPLAT_NODE_OT_stop(bpy.types.Operator):
+        """Stop a running node's subprocess (COLMAP / Brush)."""
+        bl_idname = "skysplat_node.stop"
+        bl_label = "Stop Node"
+
+        node_name: bpy.props.StringProperty()
+        tree_name: bpy.props.StringProperty(default="")
+
+        # Reuse the run operator's tree resolution.
+        _find_tree = SKYSPLAT_NODE_OT_run._find_tree
+
+        def execute(self, context):
+            from .jobs import get_running
+            tree = self._find_tree(context)
+            tree_name = tree.name if tree is not None else self.tree_name
+            job = get_running(tree_name, self.node_name)
+            if job is None:
+                self.report({'WARNING'}, "Nothing running for this node")
+                return {'CANCELLED'}
+            job.cancel()
+            self.report({'INFO'}, f"Stopping {self.node_name}…")
+            return {'FINISHED'}
+
     # Not registered as a standalone class — subclasses register themselves.
     # Blender discovers annotated properties through the MRO when subclasses
     # are registered.
-    classes = (SKYSPLAT_NODE_OT_run, SKYSPLAT_NODE_OT_view_output)
+    classes = (SKYSPLAT_NODE_OT_run, SKYSPLAT_NODE_OT_view_output, SKYSPLAT_NODE_OT_stop)
 
     def register():
         for cls in classes:

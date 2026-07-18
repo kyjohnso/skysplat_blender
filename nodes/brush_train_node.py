@@ -46,6 +46,8 @@ if HAS_BPY:
             layout.prop(self, "with_viewer")
             row = layout.row(align=True)
             row.operator("skysplat_node.run", text="Run").node_name = self.name
+            if self.status == "running":
+                row.operator("skysplat_node.stop", text="", icon="CANCEL").node_name = self.name
             row.operator("skysplat_node.view_output", text="", icon="TEXT").node_name = self.name
 
         def params_dict(self) -> dict:

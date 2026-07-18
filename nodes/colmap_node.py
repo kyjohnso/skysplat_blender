@@ -63,6 +63,8 @@ if HAS_BPY:
             layout.prop(self, "colmap_executable", text="")
             row = layout.row(align=True)
             row.operator("skysplat_node.run", text="Run").node_name = self.name
+            if self.status == "running":
+                row.operator("skysplat_node.stop", text="", icon="CANCEL").node_name = self.name
             row.operator("skysplat_node.view_output", text="", icon="TEXT").node_name = self.name
 
         def params_dict(self) -> dict:
@@ -104,8 +106,12 @@ if HAS_BPY:
             log_path = self.get_log_path()
 
             # Runs on a worker thread — pure subprocess + file IO, no bpy.
+            # register_proc lets the Stop button terminate the running step.
             def work(register_proc):
-                result = run_reconstruction(sources, workspace, params, log_path=log_path)
+                result = run_reconstruction(
+                    sources, workspace, params, log_path=log_path,
+                    register_proc=register_proc,
+                )
                 return {
                     "Model": {
                         "model_dir": result.model_dir,

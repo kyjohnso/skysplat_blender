@@ -221,6 +221,7 @@ def run_reconstruction(
     workspace_dir: Path,
     params: ColmapParams,
     log_path: Path,
+    register_proc=None,
 ) -> ColmapResult:
     """Run COLMAP feature extraction + matching + bundle adjustment.
 
@@ -279,6 +280,7 @@ def run_reconstruction(
             "--ImageReader.single_camera", "1",
             "--ImageReader.camera_model", camera_model,
             f"--{feature_gpu_flag}", use_gpu_val,
+            register_proc=register_proc,
         )
 
         # 2. Matching
@@ -287,6 +289,7 @@ def run_reconstruction(
             log, params.colmap_executable, matcher,
             "--database_path", str(db),
             f"--{matching_gpu_flag}", use_gpu_val,
+            register_proc=register_proc,
         )
 
         # 3. Bundle adjustment (mapper)
@@ -296,6 +299,7 @@ def run_reconstruction(
             "--image_path", str(image_path),
             "--output_path", str(sparse),
             "--Mapper.ba_global_function_tolerance=0.000001",
+            register_proc=register_proc,
         )
 
         # 4. Image undistorter
@@ -305,6 +309,7 @@ def run_reconstruction(
             "--input_path", str(sparse / "0"),
             "--output_path", str(workspace_dir),
             "--output_type", "COLMAP",
+            register_proc=register_proc,
         )
 
     # Move undistorter output files into sparse/0 layout.
@@ -342,16 +347,19 @@ def merge_models(
 # Private helpers
 # ---------------------------------------------------------------------------
 
-def _run_colmap_step(log_file, executable: str, subcommand: str, *args: str):
+def _run_colmap_step(log_file, executable: str, subcommand: str, *args: str, register_proc=None):
     cmd = [executable, subcommand, *args]
     log_file.write(f"\n+ {' '.join(cmd)}\n")
     log_file.flush()
-    result = subprocess.run(
-        cmd, stdout=log_file, stderr=subprocess.STDOUT, check=False,
-    )
-    if result.returncode != 0:
+    # Popen (not subprocess.run) so the running step can be terminated mid-flight
+    # via register_proc — that's what the node's Stop button cancels.
+    proc = subprocess.Popen(cmd, stdout=log_file, stderr=subprocess.STDOUT)
+    if register_proc is not None:
+        register_proc(proc)
+    returncode = proc.wait()
+    if returncode != 0:
         raise ColmapError(
-            f"colmap {subcommand} failed with code {result.returncode}. "
+            f"colmap {subcommand} failed with code {returncode}. "
             f"See log: {log_file.name}"
         )
 
