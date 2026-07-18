@@ -84,15 +84,17 @@ if HAS_BPY:
             }
             self.store_output(output, self.params_dict())
 
-            # Push panel-style auto defaults down into any connected
-            # Frame Extract nodes whose values are still pristine.
+            # Push this video's frame range into any connected Frame
+            # Extract nodes. Running Video always refreshes them — so a
+            # node duplicated from another video (Shift+D) picks up THIS
+            # video's numbers, not the copied ones. Tweak the range after
+            # running Video if you want a custom window.
             self._push_defaults_downstream(total_frames)
 
         def _push_defaults_downstream(self, total_frames: int) -> None:
-            """For each downstream Frame Extract node that hasn't been
-            user-customized, set frame_start=1, frame_end=total_frames,
-            and frame_step targeting ~150 extracted frames.
-            """
+            """Set frame_start=1, frame_end=total_frames, and a frame_step
+            targeting ~150 extracted frames on every downstream Frame
+            Extract node."""
             target_frame_count = 150
             step = max(1, int(total_frames / target_frame_count))
             for sock in self.outputs:
@@ -100,10 +102,9 @@ if HAS_BPY:
                     downstream = link.to_node
                     if downstream.bl_idname != "SkysplatFrameExtractNode":
                         continue
-                    if not downstream.params_user_edited:
-                        downstream.frame_start = 1
-                        downstream.frame_end = total_frames
-                        downstream.frame_step = step
+                    downstream.frame_start = 1
+                    downstream.frame_end = total_frames
+                    downstream.frame_step = step
 
 
     classes = (SkysplatVideoNode,)
