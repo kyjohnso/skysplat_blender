@@ -39,9 +39,11 @@ if HAS_BPY:
             description="Object (usually an empty) whose world matrix is the "
                         "transform to bake in; leave empty to use the fields below",
         )
-        location: FloatVectorProperty(name="Location", size=3, subtype="TRANSLATION")
-        rotation: FloatVectorProperty(name="Rotation", size=3, subtype="EULER")
-        scale: FloatVectorProperty(name="Scale", size=3, subtype="XYZ", default=(1.0, 1.0, 1.0))
+        # Named transform_* to avoid shadowing bpy.types.Node.location (the
+        # node's position in the editor).
+        transform_location: FloatVectorProperty(name="Location", size=3, subtype="TRANSLATION")
+        transform_rotation: FloatVectorProperty(name="Rotation", size=3, subtype="EULER")
+        transform_scale: FloatVectorProperty(name="Scale", size=3, subtype="XYZ", default=(1.0, 1.0, 1.0))
 
         def init(self, context):
             super().init(context)
@@ -59,9 +61,9 @@ if HAS_BPY:
             layout.prop(self, "transform_object")
             if self.transform_object is None:
                 col = layout.column(align=True)
-                col.prop(self, "location")
-                col.prop(self, "rotation")
-                col.prop(self, "scale")
+                col.prop(self, "transform_location")
+                col.prop(self, "transform_rotation")
+                col.prop(self, "transform_scale")
             row = layout.row(align=True)
             row.operator("skysplat_node.run", text="Run").node_name = self.name
             row.operator("skysplat_node.view_output", text="", icon="TEXT").node_name = self.name
@@ -70,7 +72,9 @@ if HAS_BPY:
             if self.transform_object is not None:
                 return self.transform_object.matrix_world.copy()
             return Matrix.LocRotScale(
-                self.location, Euler(self.rotation, 'XYZ'), self.scale,
+                self.transform_location,
+                Euler(self.transform_rotation, 'XYZ'),
+                self.transform_scale,
             )
 
         def params_dict(self) -> dict:
