@@ -5,6 +5,9 @@ Scene parts (Stage D): extract_frames — uses bpy.ops.render.opengl.
 """
 from __future__ import annotations
 
+import os
+import re
+import shutil
 from pathlib import Path
 
 _IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png"}
@@ -23,6 +26,74 @@ def discover_frames(image_dir: Path) -> list[Path]:
         p for p in image_dir.iterdir()
         if p.is_file() and p.suffix.lower() in _IMAGE_EXTENSIONS
     )
+
+
+def _safe_subdir_name(name: str) -> str:
+    """Filesystem-friendly subfolder name derived from a source id."""
+    safe = re.sub(r"[^\w.-]+", "_", str(name).strip()).strip("_")
+    return safe or "src"
+
+
+def merge_frame_dirs(sources, merged_root: Path, *, force_copy: bool = False) -> dict:
+    """Stage several frame folders under one root as per-source subfolders.
+
+    `sources` is an iterable of (source_id, frames_dir). For each, a REAL
+    subfolder merged_root/<name>/ is created (name = sanitized, collision-
+    uniquified source_id) and the image files are HARDLINKED into it one-by-one
+    (copied when force_copy=True or across filesystems).
+
+    Hardlinks, not symlinks: COLMAP canonicalizes symlinks — a directory
+    symlink gets flattened to basenames (one camera), and per-file symlinks get
+    recorded by their resolved target path (e.g. ../../Frame_Extract/...), which
+    breaks --single_camera_per_folder and makes the undistorter write outside
+    its output dir. A hardlink is indistinguishable from a regular file (no
+    target to resolve) and costs no extra disk on the same filesystem, so COLMAP
+    records clean <video>/<frame>.png names and gives one camera per video.
+
+    merged_root is wiped first so re-runs don't accumulate stale entries.
+    Returns {subdir_name: original_source_id}.
+    """
+    merged_root = Path(merged_root)
+    if merged_root.exists():
+        for entry in merged_root.iterdir():
+            if entry.is_symlink() or entry.is_file():
+                entry.unlink()
+            else:
+                shutil.rmtree(entry)
+    merged_root.mkdir(parents=True, exist_ok=True)
+
+    mapping: dict[str, str] = {}
+    used: set[str] = set()
+
+    for source_id, src in sources:
+        src = Path(src)
+        if not src.exists():
+            raise FileNotFoundError(f"Frames directory does not exist: {src}")
+
+        name = _safe_subdir_name(source_id)
+        base, i = name, 1
+        while name in used:
+            i += 1
+            name = f"{base}_{i}"
+        used.add(name)
+
+        dst = merged_root / name
+        dst.mkdir(parents=True, exist_ok=True)
+        for f in discover_frames(src):
+            target = dst / f.name
+            placed = False
+            if not force_copy:
+                try:
+                    os.link(f, target)  # hardlink: no extra disk, no symlink to resolve
+                    placed = True
+                except OSError:
+                    placed = False      # cross-filesystem etc. -> copy
+            if not placed:
+                shutil.copy2(f, target)
+
+        mapping[name] = str(source_id)
+
+    return mapping
 
 
 try:
@@ -55,6 +126,15 @@ def extract_frames(
 
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    # Clear stale frames from a previous run. Re-extracting at a different
+    # resolution or range otherwise leaves old frames at non-overlapping
+    # frame numbers, producing a mixed-resolution folder that COLMAP's
+    # --single_camera_per_folder rejects (CAMERA_SINGLE_DIM_ERROR), and an
+    # inflated image count.
+    for old in out_dir.iterdir():
+        if old.is_file() and old.suffix.lower() in _IMAGE_EXTENSIONS:
+            old.unlink()
 
     target = _find_movie_strip(scene, video_strip_name)
     if target is None:

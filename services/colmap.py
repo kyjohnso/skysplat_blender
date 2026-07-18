@@ -239,25 +239,46 @@ def run_reconstruction(
         raise ColmapError("run_reconstruction requires at least one source")
 
     if len(sources) > 1:
-        # Multi-source path is left for phase 2; reject explicitly to avoid
-        # silent single-source-only behavior.
+        # Multiple videos are merged upstream (Merge Frames node) into one
+        # source dir with per-video subfolders, so we still receive a single
+        # source here. The list form (joint/merge_after over separate sources)
+        # is not used by the node graph.
         raise ColmapError(
-            "Multi-source reconstruction (joint or merge_after) is not yet "
-            "implemented in services.colmap. Use a single source for now."
+            "run_reconstruction takes a single source. For multiple videos, "
+            "merge their frames into per-video subfolders first."
         )
 
     source = sources[0]
-    image_path = source.path
-    source_map = {
-        p: source.source_id
-        for p in Path(image_path).iterdir()
-        if p.suffix.lower() in {".jpg", ".jpeg", ".png"}
-    }
+    image_path = Path(source.path)
+
+    # Heterogeneous capture: if the image dir is organized into image-bearing
+    # subfolders (e.g. from a Merge Frames node, one folder per video), give
+    # COLMAP one camera per folder so each video solves its own intrinsics.
+    # Otherwise the classic flat single-camera layout.
+    subdirs = [d for d in sorted(image_path.iterdir()) if d.is_dir() and _images_in(d)]
+    per_folder = bool(subdirs)
+    if per_folder:
+        source_map = {p: d.name for d in subdirs for p in _images_in(d)}
+    else:
+        source_map = {p: source.source_id for p in _images_in(image_path)}
 
     if len(source_map) < 3:
         raise ColmapError(f"Need at least 3 images, found {len(source_map)} in {image_path}")
 
     distorted = workspace_dir / "distorted"
+    # Wipe intermediates from any prior run — a stale database.db would
+    # accumulate old image entries (e.g. flat names from a previous layout)
+    # alongside the new ones and corrupt the reconstruction.
+    if distorted.exists():
+        shutil.rmtree(distorted)
+    # Same for the undistorter outputs: it writes into workspace_dir/images
+    # (etc.) without clearing it, so frames from a previous run with a
+    # different layout (e.g. flat single-video names) would sit alongside
+    # the new per-video subfolders and poison the Brush dataset.
+    for stale in ("images", "sparse", "stereo"):
+        out = workspace_dir / stale
+        if out.exists():
+            shutil.rmtree(out)
     sparse = distorted / "sparse"
     sparse.mkdir(parents=True, exist_ok=True)
     db = distorted / "database.db"
@@ -272,12 +293,14 @@ def run_reconstruction(
 
     # Capture all subprocess output to log.
     with open(log_path, "w") as log:
-        # 1. Feature extraction
+        # 1. Feature extraction. One camera per subfolder for merged
+        # multi-video input; a single shared camera for a flat folder.
+        single_cam_flag = "single_camera_per_folder" if per_folder else "single_camera"
         _run_colmap_step(
             log, params.colmap_executable, "feature_extractor",
             "--database_path", str(db),
             "--image_path", str(image_path),
-            "--ImageReader.single_camera", "1",
+            f"--ImageReader.{single_cam_flag}", "1",
             "--ImageReader.camera_model", camera_model,
             f"--{feature_gpu_flag}", use_gpu_val,
             register_proc=register_proc,
@@ -346,6 +369,14 @@ def merge_models(
 # ---------------------------------------------------------------------------
 # Private helpers
 # ---------------------------------------------------------------------------
+
+_IMAGE_EXTS = {".jpg", ".jpeg", ".png"}
+
+
+def _images_in(d: Path) -> list:
+    """Image files directly inside d (one level; follows dir symlinks)."""
+    return [p for p in Path(d).iterdir() if p.is_file() and p.suffix.lower() in _IMAGE_EXTS]
+
 
 def _run_colmap_step(log_file, executable: str, subcommand: str, *args: str, register_proc=None):
     cmd = [executable, subcommand, *args]

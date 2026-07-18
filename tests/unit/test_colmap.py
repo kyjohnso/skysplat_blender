@@ -93,6 +93,38 @@ class TestRunReconstruction:
         assert any("exhaustive_matcher" in c for c in commands)
         assert any("mapper" in c for c in commands)
         assert isinstance(result, ColmapResult)
+        # Flat folder -> one shared camera.
+        feat = next(c for c in commands if "feature_extractor" in c)
+        assert "--ImageReader.single_camera" in feat
+        assert "--ImageReader.single_camera_per_folder" not in feat
+
+    def test_subfolders_use_per_folder_camera_and_span_source_map(self, tmp_path):
+        # Merge Frames produces image_root/<video>/*.png — one camera per video.
+        root = tmp_path / "merged"
+        for vid in ("vid_a", "vid_b"):
+            (root / vid).mkdir(parents=True)
+            for i in range(3):
+                (root / vid / f"f{i}.png").write_bytes(b"")
+
+        sources = [FramesSource(path=root, source_id="merged", camera_model=Auto())]
+        with patch("services.colmap.subprocess.run") as run_mock, \
+             patch("services.colmap.subprocess.Popen") as popen_mock, \
+             patch("services.colmap._read_resulting_model") as read_mock:
+            run_mock.side_effect = lambda *a, **kw: self._fake_run(0)
+            popen_mock.side_effect = lambda *a, **kw: self._fake_popen(0)
+            read_mock.return_value = ColmapModel(cameras={}, images={}, points3D={})
+            result = run_reconstruction(
+                sources, tmp_path / "ws", ColmapParams(use_gpu=False),
+                log_path=tmp_path / "log",
+            )
+
+        feat = next(c.args[0] for c in popen_mock.call_args_list
+                    if "feature_extractor" in c.args[0])
+        assert "--ImageReader.single_camera_per_folder" in feat
+        assert "--ImageReader.single_camera" not in feat
+        # source_map attributes every image to its originating video folder.
+        assert len(result.source_map) == 6
+        assert set(result.source_map.values()) == {"vid_a", "vid_b"}
 
     def test_raises_colmap_error_on_failure(self, tmp_path):
         sources = [FramesSource(path=tmp_path / "frames", source_id="vid1", camera_model=Auto())]
