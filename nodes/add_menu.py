@@ -28,6 +28,12 @@ def clear_add_menu_entries() -> None:
     _entries.clear()
 
 
+def add_menu_entries() -> tuple:
+    """All registered (bl_idname, label) pairs. Also used by
+    link_drag_search to discover node types."""
+    return tuple(_entries)
+
+
 if HAS_BPY:
 
     class NODE_MT_skysplat_add(Menu):
@@ -45,15 +51,10 @@ if HAS_BPY:
     def _draw_skysplat_submenu(self, context):
         if context.space_data.tree_type != "SkySplatNodeTree":
             return
-        # Submenu for tidy Shift-A browsing.
+        # Note: this menu can't feed Blender's native link-drag-search —
+        # that popup is hard-disabled for custom trees (NTREE_CUSTOM) in
+        # node_relationships.cc. See link_drag_search.py for our own.
         self.layout.menu(NODE_MT_skysplat_add.bl_idname, icon="NODETREE")
-        # Also draw entries inline so Blender's link-drag-search popup
-        # (which doesn't recurse into submenus on some versions) can
-        # find them by socket-type compatibility.
-        for idname, label in _entries:
-            op = self.layout.operator("node.add_node", text=label)
-            op.type = idname
-            op.use_transform = True
 
 
     classes = (NODE_MT_skysplat_add,)
