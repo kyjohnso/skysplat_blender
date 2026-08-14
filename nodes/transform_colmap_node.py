@@ -26,7 +26,7 @@ if HAS_BPY:
     import math
     from mathutils import Euler, Matrix
 
-    from .base import SkysplatNode
+    from .base import SkysplatNode, SKYSPLAT_NODE_OT_run, sanitize_workspace_name
     from .add_menu import register_add_menu_entry
 
     class SkysplatTransformColmapNode(SkysplatNode):
@@ -51,22 +51,21 @@ if HAS_BPY:
             self.outputs.new("SkysplatColmapModelSocket", "Model")
 
         def draw_buttons(self, context, layout):
-            icon_map = {
-                "clean": "DOT", "dirty": "FILE_REFRESH", "running": "PLAY",
-                "done": "CHECKMARK", "errored": "ERROR",
-            }
-            layout.label(text=self.status.title(), icon=icon_map.get(self.status, "DOT"))
-            if self.last_error:
-                layout.label(text=self.last_error[:80], icon="ERROR")
+            self.draw_status(layout)
+            row = layout.row(align=True)
+            op = row.operator("skysplat_node.transform_show_preview",
+                              text="Show in Viewport", icon="HIDE_OFF")
+            op.node_name = self.name
+            op = row.operator("skysplat_node.transform_remove_preview",
+                              text="", icon="X")
+            op.node_name = self.name
             layout.prop(self, "transform_object")
             if self.transform_object is None:
                 col = layout.column(align=True)
                 col.prop(self, "transform_location")
                 col.prop(self, "transform_rotation")
                 col.prop(self, "transform_scale")
-            row = layout.row(align=True)
-            row.operator("skysplat_node.run", text="Run").node_name = self.name
-            row.operator("skysplat_node.view_output", text="", icon="TEXT").node_name = self.name
+            self.draw_run_row(layout)
 
         def _world_matrix(self) -> Matrix:
             if self.transform_object is not None:
@@ -121,7 +120,82 @@ if HAS_BPY:
             self.store_output(output, self.params_dict())
 
 
-    classes = (SkysplatTransformColmapNode,)
+    class SKYSPLAT_NODE_OT_transform_show_preview(bpy.types.Operator):
+        """Import the upstream COLMAP model as a point cloud under a root
+        empty, and set it as this node's transform object. Align the empty
+        in the viewport, then Run to bake. Click again to refresh the
+        points after an upstream re-run (the root's transform is kept)."""
+        bl_idname = "skysplat_node.transform_show_preview"
+        bl_label = "Show COLMAP Preview"
+        bl_options = {'UNDO'}
+
+        node_name: bpy.props.StringProperty()
+        tree_name: bpy.props.StringProperty(default="")
+
+        _find_tree = SKYSPLAT_NODE_OT_run._find_tree
+
+        def execute(self, context):
+            from ..services.colmap_view import import_model_preview
+
+            tree = self._find_tree(context)
+            node = tree.nodes.get(self.node_name) if tree else None
+            if node is None:
+                self.report({'ERROR'}, f"Node not found: {self.node_name}")
+                return {'CANCELLED'}
+            lineage = node.get_upstream_lineage("Model")
+            model_dir = lineage.get("model_dir") if lineage else None
+            if not model_dir or not Path(model_dir).exists():
+                self.report({'ERROR'}, "No upstream model — Run the connected Model node first")
+                return {'CANCELLED'}
+
+            try:
+                root = import_model_preview(
+                    context.scene, Path(model_dir),
+                    sanitize_workspace_name(node.name), node.node_uuid)
+            except Exception as exc:
+                self.report({'ERROR'}, f"Preview failed: {exc}")
+                return {'CANCELLED'}
+
+            node.transform_object = root
+            for obj in context.selected_objects:
+                obj.select_set(False)
+            root.select_set(True)
+            context.view_layer.objects.active = root
+            self.report({'INFO'}, f"Preview loaded — transform {root.name} to align, then Run")
+            return {'FINISHED'}
+
+    class SKYSPLAT_NODE_OT_transform_remove_preview(bpy.types.Operator):
+        """Remove this node's viewport preview objects"""
+        bl_idname = "skysplat_node.transform_remove_preview"
+        bl_label = "Remove COLMAP Preview"
+        bl_options = {'UNDO'}
+
+        node_name: bpy.props.StringProperty()
+        tree_name: bpy.props.StringProperty(default="")
+
+        _find_tree = SKYSPLAT_NODE_OT_run._find_tree
+
+        def execute(self, context):
+            from ..services.colmap_view import remove_preview
+
+            tree = self._find_tree(context)
+            node = tree.nodes.get(self.node_name) if tree else None
+            if node is None:
+                self.report({'ERROR'}, f"Node not found: {self.node_name}")
+                return {'CANCELLED'}
+            # The PointerProperty goes None on its own when the root is
+            # deleted; the baked transform_* fields are untouched.
+            if remove_preview(node.node_uuid):
+                self.report({'INFO'}, "Preview removed")
+            else:
+                self.report({'WARNING'}, "No preview to remove")
+            return {'FINISHED'}
+
+    classes = (
+        SkysplatTransformColmapNode,
+        SKYSPLAT_NODE_OT_transform_show_preview,
+        SKYSPLAT_NODE_OT_transform_remove_preview,
+    )
 
     def register():
         for cls in classes:
