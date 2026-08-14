@@ -90,14 +90,22 @@ def sanitize_workspace_name(name: str) -> str:
     return safe or "node"
 
 
-def default_workspace_dir(node_name: str, blend_path: str | None) -> Path:
+def default_workspace_dir(step_label: str, node_uuid: str, blend_path: str | None) -> Path:
     """Resolve the default workspace dir for a node.
 
     If the .blend has been saved, anchor under
-    <blend_dir>/skysplat_workspace/<node_name>/. Otherwise fall back to
-    ~/skysplat_workspace/<node_name>/.
+    <blend_dir>/skysplat_workspace/, otherwise ~/skysplat_workspace/.
+
+    The folder key is the step type plus a short uuid, e.g.
+    brush_train_3f2a9c1d/ — readable (runs of one step sort together)
+    while collision-proof. Node NAMES are only unique within one tree,
+    so name-keyed folders silently overwrote each other across trees,
+    sessions with unsaved .blends (which share ~/skysplat_workspace),
+    and delete/recreate cycles. uuids never collide, and Shift-D copies
+    get fresh ones.
     """
-    folder = sanitize_workspace_name(node_name)
+    step = sanitize_workspace_name(step_label).lower()
+    folder = f"{step}_{node_uuid[:8]}" if node_uuid else step
     if blend_path:
         return Path(blend_path).parent / "skysplat_workspace" / folder
     return Path.home() / "skysplat_workspace" / folder
@@ -177,6 +185,46 @@ if HAS_BPY:
             self.last_error = ""
             self.status = "dirty"
 
+        def effective_status(self) -> str:
+            """Status with a draw-time dirty check: a node that ran but whose
+            params (or upstream results) have since changed shows as dirty.
+
+            Cheap enough per redraw — params_dict() is prop reads and the
+            hash is over a small dict. This is what makes e.g. dragging the
+            Transform node's empty in the viewport read back as "Dirty"
+            without any depsgraph handler: the node editor repaints as soon
+            as it next gets events.
+            """
+            if self.status == "done":
+                try:
+                    now = current_param_hash(self.params_dict(), self._collect_upstream_hashes())
+                    if now != self.last_run_hash:
+                        return "dirty"
+                except Exception:
+                    pass
+            return self.status
+
+        _STATUS_ICONS = {
+            "clean": "DOT", "dirty": "FILE_REFRESH", "running": "PLAY",
+            "done": "CHECKMARK", "errored": "ERROR",
+        }
+
+        def draw_status(self, layout):
+            """Shared header block: status badge plus last error, if any."""
+            status = self.effective_status()
+            layout.label(text=status.title(), icon=self._STATUS_ICONS.get(status, "DOT"))
+            if self.last_error:
+                layout.label(text=self.last_error[:80], icon="ERROR")
+
+        def draw_run_row(self, layout):
+            """Shared footer row: Run, Stop (while running), log, workspace."""
+            row = layout.row(align=True)
+            row.operator("skysplat_node.run", text="Run").node_name = self.name
+            if self.status == "running":
+                row.operator("skysplat_node.stop", text="", icon="CANCEL").node_name = self.name
+            row.operator("skysplat_node.view_output", text="", icon="TEXT").node_name = self.name
+            row.operator("skysplat_node.open_workspace", text="", icon="FILE_FOLDER").node_name = self.name
+
         # Subclasses override these.
         def params_dict(self) -> dict:
             """Return the parameter values that affect this node's output."""
@@ -202,8 +250,12 @@ if HAS_BPY:
         def get_workspace_dir(self) -> Path:
             if self.workspace_dir_override:
                 return Path(bpy.path.abspath(self.workspace_dir_override))
+            if not self.node_uuid:
+                # Nodes from blends predating node_uuid. Only reached from
+                # run/operator contexts, where writing ID props is allowed.
+                self.node_uuid = uuid_module.uuid4().hex
             blend_path = bpy.data.filepath or ""
-            return default_workspace_dir(self.name, blend_path)
+            return default_workspace_dir(self.bl_label, self.node_uuid, blend_path)
 
         def get_log_path(self) -> Path:
             return self.get_workspace_dir() / "run.log"
@@ -610,10 +662,38 @@ if HAS_BPY:
             self.report({'INFO'}, f"Stopping {self.node_name}…")
             return {'FINISHED'}
 
+    class SKYSPLAT_NODE_OT_open_workspace(bpy.types.Operator):
+        """Open this node's workspace folder in the system file browser"""
+        bl_idname = "skysplat_node.open_workspace"
+        bl_label = "Open Workspace Folder"
+
+        node_name: bpy.props.StringProperty()
+        tree_name: bpy.props.StringProperty(default="")
+
+        _find_tree = SKYSPLAT_NODE_OT_run._find_tree
+
+        def execute(self, context):
+            tree = self._find_tree(context)
+            node = tree.nodes.get(self.node_name) if tree else None
+            if node is None:
+                self.report({'ERROR'}, f"Node not found: {self.node_name}")
+                return {'CANCELLED'}
+            workspace = node.get_workspace_dir()
+            # A node that hasn't run yet has no folder; make it so the
+            # browser has something to open.
+            workspace.mkdir(parents=True, exist_ok=True)
+            bpy.ops.wm.path_open(filepath=str(workspace))
+            return {'FINISHED'}
+
     # Not registered as a standalone class — subclasses register themselves.
     # Blender discovers annotated properties through the MRO when subclasses
     # are registered.
-    classes = (SKYSPLAT_NODE_OT_run, SKYSPLAT_NODE_OT_view_output, SKYSPLAT_NODE_OT_stop)
+    classes = (
+        SKYSPLAT_NODE_OT_run,
+        SKYSPLAT_NODE_OT_view_output,
+        SKYSPLAT_NODE_OT_stop,
+        SKYSPLAT_NODE_OT_open_workspace,
+    )
 
     def register():
         for cls in classes:

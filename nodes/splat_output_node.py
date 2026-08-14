@@ -49,13 +49,7 @@ if HAS_BPY:
             self.inputs.new("SkysplatSplatSocket", "Splat")
 
         def draw_buttons(self, context, layout):
-            icon_map = {
-                "clean": "DOT", "dirty": "FILE_REFRESH", "running": "PLAY",
-                "done": "CHECKMARK", "errored": "ERROR",
-            }
-            layout.label(text=self.status.title(), icon=icon_map.get(self.status, "DOT"))
-            if self.last_error:
-                layout.label(text=self.last_error[:80], icon="ERROR")
+            self.draw_status(layout)
 
             cache = self.get_cached_output()
             files = cache.get("files", []) if cache else []
@@ -70,9 +64,7 @@ if HAS_BPY:
             else:
                 layout.label(text="Run to list generated splats", icon="INFO")
 
-            row = layout.row(align=True)
-            row.operator("skysplat_node.run", text="Run").node_name = self.name
-            row.operator("skysplat_node.view_output", text="", icon="TEXT").node_name = self.name
+            self.draw_run_row(layout)
 
         def params_dict(self) -> dict:
             return {}

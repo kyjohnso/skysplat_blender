@@ -20,18 +20,31 @@ class TestSanitizeWorkspaceName:
 
 
 class TestDefaultWorkspaceDir:
+    UUID = "3f2a9c1d77aa01c25d12e9f09c01b44e"
+
     def test_blend_path_anchors_workspace(self, tmp_path):
         blend = tmp_path / "scene.blend"
-        result = default_workspace_dir(node_name="COLMAP Reconstruct", blend_path=str(blend))
-        assert result == tmp_path / "skysplat_workspace" / "COLMAP_Reconstruct"
+        result = default_workspace_dir(
+            step_label="COLMAP Reconstruct", node_uuid=self.UUID, blend_path=str(blend))
+        assert result == tmp_path / "skysplat_workspace" / "colmap_reconstruct_3f2a9c1d"
 
     def test_unsaved_blend_uses_home(self):
-        result = default_workspace_dir(node_name="Video", blend_path="")
-        assert result == Path.home() / "skysplat_workspace" / "Video"
+        result = default_workspace_dir(step_label="Video", node_uuid=self.UUID, blend_path="")
+        assert result == Path.home() / "skysplat_workspace" / "video_3f2a9c1d"
 
     def test_unsaved_blend_none_uses_home(self):
-        result = default_workspace_dir(node_name="Video", blend_path=None)
-        assert result == Path.home() / "skysplat_workspace" / "Video"
+        result = default_workspace_dir(step_label="Video", node_uuid=self.UUID, blend_path=None)
+        assert result == Path.home() / "skysplat_workspace" / "video_3f2a9c1d"
+
+    def test_same_step_different_nodes_dont_collide(self):
+        a = default_workspace_dir("Brush Train", "aaaa1111" + "0" * 24, "")
+        b = default_workspace_dir("Brush Train", "bbbb2222" + "0" * 24, "")
+        assert a != b
+        assert a.name.startswith("brush_train_")
+
+    def test_missing_uuid_falls_back_to_step_only(self):
+        result = default_workspace_dir("Brush Train", "", "")
+        assert result == Path.home() / "skysplat_workspace" / "brush_train"
 
 
 class TestTailText:

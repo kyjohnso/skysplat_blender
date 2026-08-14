@@ -30,20 +30,12 @@ if HAS_BPY:
             self.outputs.new("SkysplatFramesSocket", "Frames")
 
         def draw_buttons(self, context, layout):
-            icon_map = {
-                "clean": "DOT", "dirty": "FILE_REFRESH", "running": "PLAY",
-                "done": "CHECKMARK", "errored": "ERROR",
-            }
-            layout.label(text=self.status.title(), icon=icon_map.get(self.status, "DOT"))
-            if self.last_error:
-                layout.label(text=self.last_error[:80], icon="ERROR")
+            self.draw_status(layout)
             col = layout.column(align=True)
             col.prop(self, "frame_start")
             col.prop(self, "frame_end")
             col.prop(self, "frame_step")
-            row = layout.row(align=True)
-            row.operator("skysplat_node.run", text="Run").node_name = self.name
-            row.operator("skysplat_node.view_output", text="", icon="TEXT").node_name = self.name
+            self.draw_run_row(layout)
 
         def params_dict(self) -> dict:
             return {
